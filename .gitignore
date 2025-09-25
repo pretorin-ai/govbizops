@@ -144,6 +144,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# Data files
+*.json
+!.env.example
+
 # Spyder project settings
 .spyderproject
 .spyproject

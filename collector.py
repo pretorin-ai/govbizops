@@ -34,10 +34,16 @@ class OpportunityCollector:
             naics_codes: List of NAICS codes to track
             storage_path: Path to store collected opportunities
         """
+        # Validate NAICS codes for compliance
+        if len(naics_codes) > SAMGovClient.MAX_NAICS_CODES:
+            raise ValueError(f"Maximum {SAMGovClient.MAX_NAICS_CODES} NAICS codes allowed. Got {len(naics_codes)}.")
+        
         self.client = SAMGovClient(api_key)
         self.naics_codes = naics_codes
         self.storage_path = Path(storage_path)
         self.opportunities = self._load_opportunities()
+        
+        logger.info(f"Initialized collector with {len(naics_codes)} NAICS codes: {', '.join(naics_codes)}")
     
     def _load_opportunities(self) -> Dict[str, Any]:
         """Load existing opportunities from storage"""
@@ -71,11 +77,16 @@ class OpportunityCollector:
         Returns:
             List of new opportunities collected
         """
+        # Validate days_back for compliance
+        if days_back > SAMGovClient.MAX_DAYS_RANGE:
+            raise ValueError(f"Maximum {SAMGovClient.MAX_DAYS_RANGE} days range allowed. Got {days_back} days.")
+        
         posted_to = datetime.now()
         posted_from = posted_to - timedelta(days=days_back)
         
         logger.info(f"Collecting opportunities from {posted_from} to {posted_to}")
         logger.info(f"NAICS codes: {', '.join(self.naics_codes)}")
+        logger.info(f"Compliance: Max {SAMGovClient.MAX_NAICS_CODES} NAICS codes, {SAMGovClient.MAX_DAYS_RANGE} days range, {SAMGovClient.MAX_DAILY_COLLECTIONS} collection per day")
         
         try:
             # SAM.gov API treats multiple NAICS codes as AND, not OR

@@ -59,6 +59,20 @@ def run_collector(args):
     # Parse NAICS codes
     naics_codes = args.naics_codes.split(',') if args.naics_codes else ["541511", "541512","541690"]
     
+    # Compliance warnings
+    from client import SAMGovClient
+    if len(naics_codes) > SAMGovClient.MAX_NAICS_CODES:
+        logger.warning(f"⚠️  COMPLIANCE WARNING: You requested {len(naics_codes)} NAICS codes, but maximum {SAMGovClient.MAX_NAICS_CODES} are allowed per collection.")
+        logger.warning("   This helps prevent bulk data mining and ensures SAM.gov terms compliance.")
+        naics_codes = naics_codes[:SAMGovClient.MAX_NAICS_CODES]
+        logger.info(f"   Using first {len(naics_codes)} codes: {', '.join(naics_codes)}")
+    
+    if args.days_back and args.days_back > SAMGovClient.MAX_DAYS_RANGE:
+        logger.warning(f"⚠️  COMPLIANCE WARNING: You requested {args.days_back} days, but maximum {SAMGovClient.MAX_DAYS_RANGE} days are allowed per collection.")
+        logger.warning("   This helps prevent bulk data mining and ensures SAM.gov terms compliance.")
+        args.days_back = SAMGovClient.MAX_DAYS_RANGE
+        logger.info(f"   Using maximum allowed range: {args.days_back} days")
+    
     # Initialize collector
     storage_path = args.storage_path or os.path.join(get_data_dir(), 'opportunities.json')
     collector = OpportunityCollector(
@@ -164,7 +178,18 @@ def run_analyzer(args):
 
 def run_scheduled_collector(args):
     """Run collector on a schedule"""
+    # Enforce minimum 24-hour interval for compliance
+    from client import SAMGovClient
+    min_interval = 1440  # 24 hours in minutes
+    
+    if args.interval < min_interval:
+        logger.warning(f"⚠️  COMPLIANCE WARNING: Minimum interval is {min_interval} minutes (24 hours) to prevent bulk data mining.")
+        logger.warning("   This ensures SAM.gov terms compliance and prevents excessive API usage.")
+        args.interval = min_interval
+        logger.info(f"   Using minimum allowed interval: {args.interval} minutes (24 hours)")
+    
     logger.info(f"Starting scheduled collector (interval: {args.interval} minutes)")
+    logger.info(f"Compliance: Max {SAMGovClient.MAX_NAICS_CODES} NAICS codes, {SAMGovClient.MAX_DAYS_RANGE} days range, {SAMGovClient.MAX_DAILY_COLLECTIONS} collection per day")
     
     while True:
         try:
@@ -193,9 +218,9 @@ def main():
     # Collector mode
     collector_parser = subparsers.add_parser('collect', help='Collect opportunities')
     collector_parser.add_argument('--naics-codes', type=str, 
-                                help='Comma-separated NAICS codes (default: 541511,541512)')
+                                help=f'Comma-separated NAICS codes (max 3, default: 541511,541512)')
     collector_parser.add_argument('--days-back', type=int, default=1,
-                                help='Number of days to look back (default: 1)')
+                                help=f'Number of days to look back (max 7, default: 1)')
     collector_parser.add_argument('--storage-path', type=str, default=None,
                                 help='Path to store opportunities')
     collector_parser.add_argument('--analyze', action='store_true',
@@ -205,10 +230,10 @@ def main():
     
     # Scheduled collector mode
     scheduled_parser = subparsers.add_parser('schedule', help='Run collector on schedule')
-    scheduled_parser.add_argument('--interval', type=int, default=60,
-                                help='Collection interval in minutes (default: 60)')
+    scheduled_parser.add_argument('--interval', type=int, default=1440,
+                                help='Collection interval in minutes (min 1440=24h, default: 1440)')
     scheduled_parser.add_argument('--naics-codes', type=str,
-                                help='Comma-separated NAICS codes (default: 541511,541512)')
+                                help=f'Comma-separated NAICS codes (max 3, default: 541511,541512)')
     scheduled_parser.add_argument('--storage-path', type=str, default=None,
                                 help='Path to store opportunities')
     scheduled_parser.add_argument('--analyze', action='store_true',

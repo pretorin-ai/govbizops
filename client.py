@@ -3,6 +3,7 @@ SAM.gov API client for fetching contract opportunities
 """
 
 import requests
+import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import logging
@@ -14,6 +15,12 @@ class SAMGovClient:
     """Client for interacting with SAM.gov Contract Opportunities API"""
     
     BASE_URL = "https://api.sam.gov/opportunities/v2/search"
+    
+    # Compliance limits
+    MAX_NAICS_CODES = 3  # Maximum NAICS codes per collection
+    MAX_DAYS_RANGE = 7   # Maximum days to collect at once
+    RATE_LIMIT_DELAY = 2  # Seconds between API calls
+    MAX_DAILY_COLLECTIONS = 1  # Maximum collections per day
     
     def __init__(self, api_key: str, use_alpha: bool = False):
         """
@@ -32,6 +39,35 @@ class SAMGovClient:
             "X-Api-Key": api_key,
             "Accept": "application/json"
         })
+        
+        # Track daily collection count
+        self._daily_collections = 0
+        self._last_collection_date = None
+    
+    def _check_daily_limit(self):
+        """Check if daily collection limit has been reached"""
+        today = datetime.now().date()
+        
+        # Reset counter if it's a new day
+        if self._last_collection_date != today:
+            self._daily_collections = 0
+            self._last_collection_date = today
+        
+        if self._daily_collections >= self.MAX_DAILY_COLLECTIONS:
+            raise ValueError(f"Daily collection limit reached ({self.MAX_DAILY_COLLECTIONS} per day). Please try again tomorrow.")
+        
+        self._daily_collections += 1
+    
+    def _validate_naics_codes(self, naics_codes: Optional[List[str]]):
+        """Validate NAICS codes against compliance limits"""
+        if naics_codes and len(naics_codes) > self.MAX_NAICS_CODES:
+            raise ValueError(f"Maximum {self.MAX_NAICS_CODES} NAICS codes allowed per collection. Got {len(naics_codes)}.")
+    
+    def _validate_date_range(self, posted_from: datetime, posted_to: datetime):
+        """Validate date range against compliance limits"""
+        days_diff = (posted_to - posted_from).days
+        if days_diff > self.MAX_DAYS_RANGE:
+            raise ValueError(f"Maximum {self.MAX_DAYS_RANGE} days range allowed per collection. Got {days_diff} days.")
     
     def search_opportunities(
         self,
@@ -56,6 +92,13 @@ class SAMGovClient:
         Returns:
             API response as dictionary
         """
+        # Check daily collection limit
+        self._check_daily_limit()
+        
+        # Validate inputs for compliance
+        self._validate_naics_codes(naics_codes)
+        self._validate_date_range(posted_from, posted_to)
+        
         # Validate date range (max 1 year)
         if posted_to - posted_from > timedelta(days=365):
             raise ValueError("Date range cannot exceed 1 year")
@@ -89,6 +132,9 @@ class SAMGovClient:
         result = response.json()
         logger.info(f"API Response: totalRecords={result.get('totalRecords', 0)}, returned={len(result.get('opportunitiesData', []))}")
         
+        # Rate limiting delay
+        time.sleep(self.RATE_LIMIT_DELAY)
+        
         return result
     
     def get_all_opportunities(
@@ -110,9 +156,13 @@ class SAMGovClient:
         Returns:
             List of all opportunities
         """
+        # Validate inputs for compliance
+        self._validate_naics_codes(naics_codes)
+        self._validate_date_range(posted_from, posted_to)
+        
         all_opportunities = []
         offset = 0
-        limit = 1000  # Maximum allowed by API
+        limit = 500  # Reduced from 1000 to be more conservative
         
         while True:
             try:
@@ -138,8 +188,12 @@ class SAMGovClient:
                 
                 offset += limit
                 
+                # Additional rate limiting for pagination
+                time.sleep(self.RATE_LIMIT_DELAY)
+                
             except Exception as e:
                 logger.error(f"Error fetching opportunities at offset {offset}: {e}")
                 break
         
+        logger.info(f"Total opportunities collected: {len(all_opportunities)}")
         return all_opportunities

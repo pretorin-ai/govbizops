@@ -28,13 +28,11 @@ def main():
     
     # Define NAICS codes to track
     # Example: IT services and software development
-    # Note: These codes have been verified to have active opportunities
+    # Note: Limited to 3 codes for SAM.gov compliance
     naics_codes = [
         "541519",  # Other Computer Related Services (most active)
-        "513210",  # Software Publishers
         "541511",  # Custom Computer Programming Services
         "541512",  # Computer Systems Design Services
-        "541690",  # Other Scientific and Technical Consulting Services
     ]
     
     # Initialize collector
@@ -45,9 +43,10 @@ def main():
     )
     
     print("Collecting daily opportunities...")
+    print("Note: Limited to 7 days maximum for SAM.gov compliance")
     
-    # Collect opportunities from the past day
-    new_opportunities = collector.collect_daily_opportunities(days_back=30)
+    # Collect opportunities from the past day (max 7 days for compliance)
+    new_opportunities = collector.collect_daily_opportunities(days_back=1)
     
     print(f"\nFound {len(new_opportunities)} new opportunities")
     

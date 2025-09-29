@@ -34,6 +34,7 @@ def main():
         "513210",  # Software Publishers
         "541511",  # Custom Computer Programming Services
         "541512",  # Computer Systems Design Services
+        "541690",  # Other Scientific and Technical Consulting Services
     ]
     
     # Initialize collector
@@ -46,7 +47,7 @@ def main():
     print("Collecting daily opportunities...")
     
     # Collect opportunities from the past day
-    new_opportunities = collector.collect_daily_opportunities(days_back=1)
+    new_opportunities = collector.collect_daily_opportunities(days_back=30)
     
     print(f"\nFound {len(new_opportunities)} new opportunities")
     

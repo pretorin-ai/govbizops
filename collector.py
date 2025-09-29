@@ -9,7 +9,10 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
 
-from .client import SAMGovClient
+try:
+    from .client import SAMGovClient
+except ImportError:
+    from client import SAMGovClient
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +101,10 @@ class OpportunityCollector:
             new_opportunities = []
             for opp in opportunities:
                 notice_id = opp.get("noticeId")
-                if notice_id and notice_id not in self.opportunities:
+                opp_type = opp.get("type", "")
+                
+                # Only collect opportunities with "Solicitation" in the type
+                if notice_id and notice_id not in self.opportunities and "Solicitation" in opp_type:
                     # Store opportunity with metadata
                     self.opportunities[notice_id] = {
                         "collected_date": datetime.now().isoformat(),

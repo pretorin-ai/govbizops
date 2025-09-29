@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Federal Opportunities Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .stats {
+            background: #e9ecef;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .opportunity {
+            background: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .opportunity h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .meta {
+            color: #666;
+            font-size: 14px;
+        }
+        .meta span {
+            margin-right: 20px;
+        }
+        .deadline {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .link {
+            margin-top: 10px;
+        }
+        .link a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .link a:hover {
+            text-decoration: underline;
+        }
+        .analyze-btn {
+            background: #2980b9;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+            margin-right: 10px;
+        }
+        .analyze-btn:hover {
+            background: #1f5f99;
+        }
+        .analyze-btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .status-message {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .view-analysis-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .view-analysis-btn:hover {
+            background: #1e8449;
+        }
+    </style>
+</head>
+<body>
+    <h1>Federal Contract Opportunities</h1>
+    
+    <div class="stats">
+        <strong>Total Opportunities:</strong> {{ total }}
+    </div>
+    
+    {% for opp in opportunities %}
+    <div class="opportunity">
+        <h3>{{ opp.title }}</h3>
+        
+        <div class="meta">
+            <span><strong>Posted:</strong> {{ opp.postedDate }}</span>
+            <span><strong>NAICS:</strong> {{ opp.naicsCode or 'N/A' }}</span>
+            <span><strong>Type:</strong> {{ opp.type }}</span>
+            {% if opp.responseDeadLine %}
+            <span class="deadline"><strong>Deadline:</strong> {{ opp.responseDeadLine[:10] }}</span>
+            {% endif %}
+        </div>
+        
+        {% if opp.solicitationNumber %}
+        <p><strong>Solicitation:</strong> {{ opp.solicitationNumber }}</p>
+        {% endif %}
+        
+        {% if opp.uiLink %}
+        <div class="link">
+            <a href="{{ opp.uiLink }}" target="_blank">View on SAM.gov →</a>
+        </div>
+        {% endif %}
+        
+        <div class="actions">
+            <button class="analyze-btn" onclick="analyzeSolicitation('{{ opp.noticeId }}')">
+                Analyze & Generate Response
+            </button>
+            <a href="/view_analysis/{{ opp.noticeId }}" class="view-analysis-btn" target="_blank">
+                View Analysis
+            </a>
+            <div id="status-{{ opp.noticeId }}" class="status-message" style="display: none;"></div>
+        </div>
+    </div>
+    {% endfor %}
+    
+    <script>
+        async function analyzeSolicitation(noticeId) {
+            const btn = document.querySelector(`button[onclick="analyzeSolicitation('${noticeId}')"]`);
+            const status = document.getElementById(`status-${noticeId}`);
+            
+            btn.disabled = true;
+            btn.textContent = 'Analyzing...';
+            status.style.display = 'none';
+            
+            try {
+                const response = await fetch(`/analyze/${noticeId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    status.className = 'status-message success';
+                    status.textContent = `${data.message} - Documents found: ${data.documents_found}`;
+                    status.style.display = 'block';
+                } else {
+                    status.className = 'status-message error';
+                    status.textContent = `Error: ${data.error}`;
+                    status.style.display = 'block';
+                }
+            } catch (error) {
+                status.className = 'status-message error';
+                status.textContent = `Error: ${error.message}`;
+                status.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Analyze & Generate Response';
+            }
+        }
+    </script>
+</body>
+</html>

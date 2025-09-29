@@ -147,6 +147,43 @@ venv.bak/
 # Data files
 *.json
 !.env.example
+!package.json
+!package-lock.json
+
+# Log directories
+logs/
+*.log
+
+# Data directories
+data/
+opportunities_data/
+
+# Analysis results
+analysis_*.json
+test_analysis.json
+simple_test_result.json
+sam_api_response.json
+
+# Temporary test files
+test_fresh_opportunity.py
+test_api_endpoint.py
+test_opportunity_structure.py
+test_sam_api_search.py
+test_lightweight_scraping.py
+test_html_content.py
+test_requests_html.py
+rendered_*.html
+sam_page.html
+script_*.js
+embedded_data.json
+
+# Local environment files
+.env.local
+.env.*.local
+
+# Docker volumes (if running locally)
+postgres_data/
+redis_data/
 
 # Spyder project settings
 .spyderproject

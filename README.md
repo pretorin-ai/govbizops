@@ -685,6 +685,9 @@ When using this library to access SAM.gov data, you must comply with the [SAM.go
 
 > **⚠️ Important**: By using this library, you agree to comply with all [SAM.gov Terms of Use](https://sam.gov/about/terms-of-use). Violations may result in loss of access to SAM.gov services.
 
+## News
+- **Coming Soon:** updated user interface and integration into other Pretorin tools
+
 ---
 
 <div align="center">

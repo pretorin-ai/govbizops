@@ -36,15 +36,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import govbizops components - do this after path fix
-if __name__ == '__main__':
-    # Import here for script usage
+# Import govbizops components
+try:
+    # Try package imports first (for installed package)
+    from govbizops.client import SAMGovClient
+    from govbizops.collector import OpportunityCollector
+    from govbizops.solicitation_analyzer import SolicitationAnalyzer
+except ImportError:
+    # Fall back to direct imports (for script usage)
     from client import SAMGovClient
     from collector import OpportunityCollector
     from solicitation_analyzer import SolicitationAnalyzer
-else:
-    # Import normally for module usage
-    from govbizops import OpportunityCollector, SolicitationAnalyzer
 
 
 def get_data_dir():
@@ -56,8 +58,13 @@ def run_collector(args):
     """Run the opportunity collector"""
     logger.info("Starting opportunity collector")
     
-    # Parse NAICS codes
-    naics_codes = args.naics_codes.split(',') if args.naics_codes else ["541511", "541512","541690"]
+    # Parse NAICS codes - from args, env var, or defaults
+    if args.naics_codes:
+        naics_codes = args.naics_codes.split(',')
+    elif os.getenv('NAICS_CODES'):
+        naics_codes = os.getenv('NAICS_CODES').split(',')
+    else:
+        naics_codes = ["541511", "541512"]  # Default IT services codes
     
     # Compliance warnings
     from client import SAMGovClient
@@ -217,8 +224,8 @@ def main():
     
     # Collector mode
     collector_parser = subparsers.add_parser('collect', help='Collect opportunities')
-    collector_parser.add_argument('--naics-codes', type=str, 
-                                help=f'Comma-separated NAICS codes (max 3, default: 541511,541512)')
+    collector_parser.add_argument('--naics-codes', type=str,
+                                help=f'Comma-separated NAICS codes (max 3, default from NAICS_CODES env var or 541511,541512)')
     collector_parser.add_argument('--days-back', type=int, default=1,
                                 help=f'Number of days to look back (max 7, default: 1)')
     collector_parser.add_argument('--storage-path', type=str, default=None,
@@ -233,7 +240,7 @@ def main():
     scheduled_parser.add_argument('--interval', type=int, default=1440,
                                 help='Collection interval in minutes (min 1440=24h, default: 1440)')
     scheduled_parser.add_argument('--naics-codes', type=str,
-                                help=f'Comma-separated NAICS codes (max 3, default: 541511,541512)')
+                                help=f'Comma-separated NAICS codes (max 3, default from NAICS_CODES env var or 541511,541512)')
     scheduled_parser.add_argument('--storage-path', type=str, default=None,
                                 help='Path to store opportunities')
     scheduled_parser.add_argument('--analyze', action='store_true',
@@ -302,19 +309,19 @@ def main():
         # Show examples
         print("\nExamples:")
         print("  # Collect daily opportunities")
-        print("  python main.py collect --naics-codes 541511,541512")
+        print("  govbizops collect --naics-codes 541511,541512")
         print("  ")
         print("  # Run scheduled collection every 2 hours with analysis")
-        print("  python main.py schedule --interval 120 --analyze")
+        print("  govbizops schedule --interval 120 --analyze")
         print("  ")
         print("  # Run web viewer")
-        print("  python main.py viewer --port 5000")
+        print("  govbizops viewer --port 5000")
         print("  ")
         print("  # Analyze specific opportunity")
-        print("  python main.py analyze --url https://sam.gov/opp/abc123/view")
+        print("  govbizops analyze --url https://sam.gov/opp/abc123/view")
         print("  ")
         print("  # Analyze all opportunities in file")
-        print("  python main.py analyze --opportunity-file opportunities.json")
+        print("  govbizops analyze --opportunity-file opportunities.json")
 
 
 if __name__ == '__main__':

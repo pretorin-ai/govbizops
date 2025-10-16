@@ -4,10 +4,13 @@ services:
   # Scheduled opportunity collector
   collector:
     build: .
-    command: ["python", "main.py", "schedule", "--interval", "60", "--analyze", "--max-analyze", "5"]
+    command: ["sh", "-c", "govbizops schedule --interval $${COLLECTION_INTERVAL:-60} --analyze --max-analyze $${MAX_ANALYZE:-5}"]
     environment:
       - SAM_GOV_API_KEY=${SAM_GOV_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NAICS_CODES=${NAICS_CODES:-}
+      - COLLECTION_INTERVAL=${COLLECTION_INTERVAL:-60}
+      - MAX_ANALYZE=${MAX_ANALYZE:-5}
       - GOVBIZOPS_SERVER_MODE=true
       - PYTHONUNBUFFERED=1
     volumes:
@@ -29,7 +32,7 @@ services:
   # Web viewer for browsing collected opportunities
   viewer:
     build: .
-    command: ["python", "main.py", "viewer", "--port", "5000"]
+    command: ["govbizops", "viewer", "--port", "5000"]
     environment:
       - SAM_GOV_API_KEY=${SAM_GOV_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -55,7 +58,7 @@ services:
   analyzer:
     build: .
     # This service doesn't run by default - use docker-compose run analyzer
-    command: ["python", "main.py", "analyze", "--opportunity-file", "/app/data/opportunities.json", "--max-analyze", "10"]
+    command: ["govbizops", "analyze", "--opportunity-file", "/app/data/opportunities.json", "--max-analyze", "10"]
     environment:
       - SAM_GOV_API_KEY=${SAM_GOV_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

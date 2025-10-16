@@ -59,4 +59,4 @@ ENV GOVBIZOPS_SERVER_MODE=true
 EXPOSE 5000
 
 # Default command - show help
-CMD ["python", "main.py"]
+CMD ["govbizops"]

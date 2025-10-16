@@ -12,7 +12,8 @@ setup(
     author="Your Name",
     author_email="your.email@example.com",
     url="https://github.com/yourusername/govbizops",
-    packages=find_packages(),
+    packages=["govbizops"],
+    package_dir={"govbizops": "."},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
@@ -45,6 +46,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
+            "govbizops=main:main",
             "govbizops-setup=setup_playwright:main",
         ],
     },

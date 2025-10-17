@@ -46,7 +46,7 @@ govbizops analyze --url "https://sam.gov/opp/abc123/view"
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/govbizops.git
+git clone https://github.com/pretorin-ai/govbizops.git
 cd govbizops
 pip install -e .
 govbizops-setup  # Install Playwright browsers for web scraping

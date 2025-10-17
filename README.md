@@ -21,7 +21,7 @@ A Python library for collecting, analyzing, and managing government contract opp
 
 ```bash
 # Install the package
-git clone https://github.com/yourusername/govbizops.git
+git clone https://github.com/pretorin-ai/govbizops.git
 cd govbizops
 pip install -e .
 govbizops-setup  # Install Playwright browsers for web scraping

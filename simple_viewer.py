@@ -1,27 +1,39 @@
 """
-Simple viewer for federal_opportunities.json
+Simple viewer for opportunities.json
 """
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, jsonify, request
 import json
 import os
-from datetime import datetime
 from dotenv import load_dotenv
 
 try:
-    from .solicitation_analyzer import SolicitationAnalyzer
+    from govbizops.sam_scraper import scrape_sam_opportunity
 except ImportError:
-    from solicitation_analyzer import SolicitationAnalyzer
+    from sam_scraper import scrape_sam_opportunity
 
 load_dotenv()
 
-app = Flask(__name__)
+# Configure Flask to use templates folder for both templates and static files
+import pkg_resources
+try:
+    # When installed as package
+    template_folder = pkg_resources.resource_filename('govbizops', 'templates')
+    app = Flask(__name__, template_folder=template_folder, static_folder=template_folder)
+except:
+    # When running directly
+    app = Flask(__name__, static_folder='templates')
+
+
+def get_data_dir():
+    """Get data directory"""
+    return os.path.join(os.getcwd(), 'data')
 
 @app.route('/')
 def index():
-    """Display opportunities from federal_opportunities.json"""
-    json_file = 'federal_opportunities.json'
-    
+    """Display opportunities from opportunities.json"""
+    json_file = os.path.join(get_data_dir(), 'opportunities.json')
+
     if not os.path.exists(json_file):
         return f"<h1>Error</h1><p>File '{json_file}' not found. Run the collector first.</p>"
     
@@ -46,79 +58,67 @@ def index():
     except Exception as e:
         return f"<h1>Error</h1><p>Error reading JSON file: {str(e)}</p>"
 
-@app.route('/analyze/<notice_id>', methods=['POST'])
-def analyze_solicitation(notice_id):
-    """Analyze a specific solicitation and generate AI response"""
-    
-    # Check if API keys are configured
-    sam_api_key = os.getenv("SAM_GOV_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    
-    if not sam_api_key:
-        return jsonify({"error": "SAM_GOV_API_KEY not configured"}), 400
-    
-    if not openai_key:
-        return jsonify({"error": "OPENAI_API_KEY not configured"}), 400
-    
-    # Load the opportunity data
-    json_file = 'federal_opportunities.json'
+@app.route('/export/<notice_id>')
+def export_opportunity(notice_id):
+    """Export a single opportunity as JSON, optionally with scraped description"""
+    json_file = os.path.join(get_data_dir(), 'opportunities.json')
+    include_description = request.args.get('description', 'false').lower() == 'true'
+
     if not os.path.exists(json_file):
-        return jsonify({"error": "No opportunities data found"}), 400
-    
+        return jsonify({"error": "No opportunities data found"}), 404
+
     try:
         with open(json_file, 'r') as f:
             data = json.load(f)
-        
+
         if notice_id not in data:
             return jsonify({"error": "Opportunity not found"}), 404
-        
-        opportunity = data[notice_id]['data']
-        
-        # Initialize analyzer
-        analyzer = SolicitationAnalyzer(sam_api_key)
-        
-        # Perform analysis
-        analysis_result = analyzer.analyze_solicitation(opportunity)
-        
-        # Save analysis result to a separate file
-        analysis_file = f"analysis_{notice_id}.json"
-        with open(analysis_file, 'w') as f:
-            json.dump(analysis_result, f, indent=2, default=str)
-        
-        return jsonify({
-            "success": True,
-            "message": "Analysis completed successfully",
-            "analysis_file": analysis_file,
-            "has_ai_response": bool(analysis_result.get("ai_response")),
-            "documents_found": len(analysis_result.get("documents_info", []))
-        })
-        
-    except Exception as e:
-        return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
 
-@app.route('/view_analysis/<notice_id>')
-def view_analysis(notice_id):
-    """View analysis results for a solicitation"""
-    analysis_file = f"analysis_{notice_id}.json"
-    
-    if not os.path.exists(analysis_file):
-        return "<h1>Analysis Not Found</h1><p>Run analysis first.</p>"
-    
-    try:
-        with open(analysis_file, 'r') as f:
-            analysis = json.load(f)
-        
-        return render_template('analysis_view.html', analysis=analysis, notice_id=notice_id)
-        
+        opportunity = data[notice_id]['data'].copy()
+
+        # If description is requested and not already cached, scrape it
+        if include_description:
+            # Check if we already have a scraped description cached
+            if 'scraped_description' not in data[notice_id]:
+                # Scrape the description
+                url = opportunity.get('uiLink')
+                if url:
+                    try:
+                        # scrape_sam_opportunity already handles async internally
+                        scraped_data = scrape_sam_opportunity(url)
+
+                        if scraped_data and scraped_data.get('success'):
+                            description = scraped_data.get('description')
+                            if description:
+                                # Cache the scraped description
+                                data[notice_id]['scraped_description'] = description
+
+                                # Save updated data back to file
+                                with open(json_file, 'w') as f:
+                                    json.dump(data, f, indent=2)
+
+                                opportunity['scraped_description'] = description
+                            else:
+                                opportunity['scraping_note'] = 'No description found on page'
+                        else:
+                            opportunity['scraping_note'] = 'Failed to scrape page'
+                    except Exception as e:
+                        # If scraping fails, just continue without description
+                        opportunity['scraping_error'] = str(e)
+            else:
+                # Use cached description
+                opportunity['scraped_description'] = data[notice_id]['scraped_description']
+
+        return jsonify(opportunity)
+
     except Exception as e:
-        return f"<h1>Error</h1><p>Error loading analysis: {str(e)}</p>"
+        return jsonify({"error": f"Export failed: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    sam_key = os.getenv("SAM_GOV_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    
+    # Ensure data directory exists
+    os.makedirs(get_data_dir(), exist_ok=True)
+
     print("Simple Viewer Configuration:")
-    print(f"SAM.gov API Key: {'✓' if sam_key else '✗'}")
-    print(f"OpenAI API Key: {'✓' if openai_key else '✗'}")
-    
+    print(f"Data directory: {get_data_dir()}")
+
     app.run(debug=True, port=5000)

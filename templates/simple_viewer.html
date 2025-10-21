@@ -3,113 +3,359 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Federal Opportunities Viewer</title>
+    <title>Federal Opportunities - GovBizOps</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Work+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
+            font-family: 'Work Sans', sans-serif;
+            background-color: #FFFFFF;
+            color: #231C1C;
+            line-height: 1.6;
+        }
+
+        header {
+            background-color: #FFFFFF;
+            padding: 24px 40px;
+            border-bottom: 1px solid rgba(35, 28, 28, 0.1);
+        }
+
+        .header-content {
+            max-width: 1400px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
+
+        .logo-link {
+            display: block;
+            transition: opacity 0.2s;
+        }
+
+        .logo-link:hover {
+            opacity: 0.8;
+        }
+
+        .logo {
+            height: 40px;
+            width: auto;
+        }
+
+        .tagline {
+            font-family: 'Work Sans', sans-serif;
+            font-weight: 300;
+            font-size: 14px;
+            color: #231C1C;
+            opacity: 0.7;
+        }
+
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 60px 40px;
+        }
+
         h1 {
-            color: #333;
+            font-family: 'Lora', serif;
+            font-size: 42px;
+            font-weight: 500;
+            color: #231C1C;
+            margin-bottom: 16px;
         }
+
+        h3 {
+            font-family: 'Lora', serif;
+            font-size: 20px;
+            font-weight: 500;
+            color: #231C1C;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+
         .stats {
-            background: #e9ecef;
-            padding: 10px 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
+            background: #95D7E0;
+            padding: 20px 32px;
+            border-radius: 8px;
+            margin-bottom: 48px;
+            font-weight: 400;
         }
+
+        .stats strong {
+            font-weight: 500;
+        }
+
+        .opportunities-grid {
+            display: grid;
+            gap: 24px;
+        }
+
         .opportunity {
-            background: white;
-            padding: 20px;
-            margin-bottom: 15px;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: #FFFFFF;
+            padding: 32px;
+            border: 1px solid rgba(35, 28, 28, 0.1);
+            border-radius: 8px;
+            transition: box-shadow 0.2s, transform 0.2s;
         }
-        .opportunity h3 {
-            margin-top: 0;
-            color: #2c3e50;
+
+        .opportunity:hover {
+            box-shadow: 0 8px 24px rgba(35, 28, 28, 0.08);
+            transform: translateY(-2px);
         }
+
         .meta {
-            color: #666;
+            color: #231C1C;
             font-size: 14px;
+            font-weight: 300;
+            margin-bottom: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
         }
+
         .meta span {
-            margin-right: 20px;
+            display: flex;
+            align-items: center;
         }
+
+        .meta strong {
+            font-weight: 500;
+            margin-right: 6px;
+        }
+
         .deadline {
-            color: #e74c3c;
-            font-weight: bold;
+            color: #FF9010;
+            font-weight: 500;
         }
+
+        .solicitation-number {
+            font-family: 'Work Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 400;
+            margin: 12px 0;
+            color: #231C1C;
+            opacity: 0.8;
+        }
+
         .link {
-            margin-top: 10px;
+            margin-top: 16px;
         }
+
         .link a {
-            color: #3498db;
-            text-decoration: none;
-        }
-        .link a:hover {
+            color: #231C1C;
             text-decoration: underline;
+            font-weight: 400;
+            transition: color 0.2s;
         }
-        .analyze-btn {
-            background: #2980b9;
-            color: white;
+
+        .link a:hover {
+            color: #FF9010;
+        }
+
+        .actions {
+            margin-top: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .export-btn {
+            background: #FF9010;
+            color: #FFFFFF;
             border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
+            padding: 12px 24px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 14px;
-            margin-top: 10px;
-            margin-right: 10px;
-        }
-        .analyze-btn:hover {
-            background: #1f5f99;
-        }
-        .analyze-btn:disabled {
-            background: #bdc3c7;
-            cursor: not-allowed;
-        }
-        .status-message {
-            margin-top: 10px;
-            padding: 8px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .view-analysis-btn {
-            background: #27ae60;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-top: 10px;
+            font-size: 15px;
+            font-family: 'Work Sans', sans-serif;
+            font-weight: 500;
             text-decoration: none;
             display: inline-block;
+            transition: background 0.2s, transform 0.1s;
         }
-        .view-analysis-btn:hover {
-            background: #1e8449;
+
+        .export-btn:hover {
+            background: #e67f00;
+            transform: translateY(-1px);
+        }
+
+        .export-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(35, 28, 28, 0.6);
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background-color: #FFFFFF;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 900px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 16px 48px rgba(35, 28, 28, 0.2);
+        }
+
+        .modal-header {
+            padding: 24px 32px;
+            border-bottom: 1px solid rgba(35, 28, 28, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            font-family: 'Lora', serif;
+            font-size: 24px;
+            font-weight: 500;
+            color: #231C1C;
+            margin: 0;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 32px;
+            font-weight: 300;
+            color: #231C1C;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: #FF9010;
+        }
+
+        .modal-body {
+            padding: 24px 32px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-body pre {
+            background-color: rgba(149, 215, 224, 0.1);
+            border: 1px solid rgba(35, 28, 28, 0.1);
+            border-radius: 6px;
+            padding: 20px;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #231C1C;
+            overflow-x: auto;
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .modal-footer {
+            padding: 20px 32px;
+            border-top: 1px solid rgba(35, 28, 28, 0.1);
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-footer button {
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+            font-family: 'Work Sans', sans-serif;
+            font-weight: 500;
+            border: none;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .copy-btn {
+            background: #FF9010;
+            color: #FFFFFF;
+        }
+
+        .copy-btn:hover {
+            background: #e67f00;
+            transform: translateY(-1px);
+        }
+
+        .download-btn {
+            background: #EAB536;
+            color: #231C1C;
+        }
+
+        .download-btn:hover {
+            background: #d9a322;
+            transform: translateY(-1px);
+        }
+
+        .cancel-btn {
+            background: #FFFFFF;
+            color: #231C1C;
+            border: 1px solid rgba(35, 28, 28, 0.2);
+        }
+
+        .cancel-btn:hover {
+            background: rgba(35, 28, 28, 0.05);
+            transform: translateY(-1px);
+        }
+
+        footer {
+            max-width: 1400px;
+            margin: 60px auto 40px;
+            padding: 0 40px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 300;
+            color: #231C1C;
+            opacity: 0.6;
         }
     </style>
 </head>
 <body>
-    <h1>Federal Contract Opportunities</h1>
-    
-    <div class="stats">
-        <strong>Total Opportunities:</strong> {{ total }}
-    </div>
+    <header>
+        <div class="header-content">
+            <a href="https://pretorin.com" class="logo-link" target="_blank">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Pretorin" class="logo">
+            </a>
+            <div class="tagline">GovBizOps by Pretorin</div>
+        </div>
+    </header>
+
+    <main>
+        <h1>Federal Contract Opportunities</h1>
+
+        <div class="stats">
+            <strong>Total Opportunities:</strong> {{ total }}
+        </div>
+
+        <div class="opportunities-grid">
     
     {% for opp in opportunities %}
     <div class="opportunity">
@@ -125,64 +371,129 @@
         </div>
         
         {% if opp.solicitationNumber %}
-        <p><strong>Solicitation:</strong> {{ opp.solicitationNumber }}</p>
+        <p class="solicitation-number"><strong>Solicitation:</strong> {{ opp.solicitationNumber }}</p>
         {% endif %}
-        
+
         {% if opp.uiLink %}
         <div class="link">
             <a href="{{ opp.uiLink }}" target="_blank">View on SAM.gov →</a>
         </div>
         {% endif %}
-        
+
         <div class="actions">
-            <button class="analyze-btn" onclick="analyzeSolicitation('{{ opp.noticeId }}')">
-                Analyze & Generate Response
+            <button class="export-btn" onclick="openExportModal('{{ opp.noticeId }}', '{{ opp.title | replace("'", "\\'") }}')">
+                View & Export Complete Data
             </button>
-            <a href="/view_analysis/{{ opp.noticeId }}" class="view-analysis-btn" target="_blank">
-                View Analysis
-            </a>
-            <div id="status-{{ opp.noticeId }}" class="status-message" style="display: none;"></div>
         </div>
     </div>
     {% endfor %}
-    
+        </div>
+    </main>
+
+    <!-- Export Modal -->
+    <div id="exportModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2 id="modalTitle">Opportunity Data</h2>
+                    <p style="margin: 4px 0 0 0; font-size: 14px; font-weight: 300; color: rgba(35, 28, 28, 0.7);">Complete JSON including scraped description</p>
+                </div>
+                <button class="modal-close" onclick="closeExportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <pre id="jsonDisplay"></pre>
+            </div>
+            <div class="modal-footer">
+                <button class="copy-btn" onclick="copyJSON()">Copy to Clipboard</button>
+                <button class="download-btn" onclick="downloadJSON()">Download JSON</button>
+                <button class="cancel-btn" onclick="closeExportModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        Powered by Pretorin • Government software shouldn't suck
+    </footer>
+
     <script>
-        async function analyzeSolicitation(noticeId) {
-            const btn = document.querySelector(`button[onclick="analyzeSolicitation('${noticeId}')"]`);
-            const status = document.getElementById(`status-${noticeId}`);
-            
-            btn.disabled = true;
-            btn.textContent = 'Analyzing...';
-            status.style.display = 'none';
-            
+        let currentNoticeId = null;
+        let currentJSON = null;
+
+        async function openExportModal(noticeId, title) {
+            currentNoticeId = noticeId;
+            const modal = document.getElementById('exportModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const jsonDisplay = document.getElementById('jsonDisplay');
+
+            modalTitle.textContent = title;
+            jsonDisplay.textContent = 'Loading complete opportunity data...\n\nThis includes:\n- All metadata from SAM.gov API\n- Full description (scraped from opportunity page)\n- Opportunity details and classification\n\nPlease wait...';
+            modal.style.display = 'flex';
+
             try {
-                const response = await fetch(`/analyze/${noticeId}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    status.className = 'status-message success';
-                    status.textContent = `${data.message} - Documents found: ${data.documents_found}`;
-                    status.style.display = 'block';
-                } else {
-                    status.className = 'status-message error';
-                    status.textContent = `Error: ${data.error}`;
-                    status.style.display = 'block';
+                // Request with description scraping enabled
+                const response = await fetch(`/export/${noticeId}?description=true`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch opportunity data');
                 }
+                currentJSON = await response.json();
+                jsonDisplay.textContent = JSON.stringify(currentJSON, null, 2);
             } catch (error) {
-                status.className = 'status-message error';
-                status.textContent = `Error: ${error.message}`;
-                status.style.display = 'block';
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Analyze & Generate Response';
+                jsonDisplay.textContent = `Error: ${error.message}`;
             }
         }
+
+        function closeExportModal() {
+            document.getElementById('exportModal').style.display = 'none';
+            currentNoticeId = null;
+            currentJSON = null;
+        }
+
+        async function copyJSON() {
+            const jsonText = document.getElementById('jsonDisplay').textContent;
+            try {
+                await navigator.clipboard.writeText(jsonText);
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.style.background = '#95D7E0';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '';
+                }, 2000);
+            } catch (error) {
+                alert('Failed to copy to clipboard');
+            }
+        }
+
+        function downloadJSON() {
+            if (!currentJSON || !currentNoticeId) return;
+
+            const jsonString = JSON.stringify(currentJSON, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `opportunity_${currentNoticeId}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('exportModal');
+            if (event.target === modal) {
+                closeExportModal();
+            }
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeExportModal();
+            }
+        });
     </script>
 </body>
 </html>

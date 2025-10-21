@@ -92,7 +92,8 @@ class OpportunityCollector:
             # SAM.gov API treats multiple NAICS codes as AND, not OR
             # So we need to query each code separately
             all_opportunities_dict = {}
-            
+            total_fetched = 0
+
             for naics_code in self.naics_codes:
                 logger.info(f"Fetching opportunities for NAICS code: {naics_code}")
                 opportunities = self.client.get_all_opportunities(
@@ -100,28 +101,47 @@ class OpportunityCollector:
                     posted_to=posted_to,
                     naics_codes=[naics_code]
                 )
-                
+
+                logger.info(f"  Found {len(opportunities)} opportunities for NAICS {naics_code}")
+                total_fetched += len(opportunities)
+
                 # Use notice ID as key to avoid duplicates
                 for opp in opportunities:
                     notice_id = opp.get('noticeId')
                     if notice_id:
                         all_opportunities_dict[notice_id] = opp
-            
+
             opportunities = list(all_opportunities_dict.values())
-            
+            logger.info(f"Total fetched: {total_fetched}, Unique after deduplication: {len(opportunities)}")
+
+            # Filter and categorize
             new_opportunities = []
+            already_collected = 0
+            non_solicitation = 0
+
             for opp in opportunities:
                 notice_id = opp.get("noticeId")
                 opp_type = opp.get("type", "")
-                
+
+                if not notice_id:
+                    continue
+
+                if notice_id in self.opportunities:
+                    already_collected += 1
+                    continue
+
                 # Only collect opportunities with "Solicitation" in the type
-                if notice_id and notice_id not in self.opportunities and "Solicitation" in opp_type:
+                if "Solicitation" in opp_type:
                     # Store opportunity with metadata
                     self.opportunities[notice_id] = {
                         "collected_date": datetime.now().isoformat(),
                         "data": opp
                     }
                     new_opportunities.append(opp)
+                else:
+                    non_solicitation += 1
+
+            logger.info(f"Already collected: {already_collected}, Non-solicitation types: {non_solicitation}, New solicitations: {len(new_opportunities)}")
             
             if new_opportunities:
                 self._save_opportunities()

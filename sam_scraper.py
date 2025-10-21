@@ -45,9 +45,9 @@ class SAMWebScraper:
             
             # Browser arguments optimized for server environments
             browser_args = [
-                '--disable-dev-shm-usage',  # Helps with Docker/WSL
+                '--disable-dev-shm-usage',  # Helps with headless environments
                 '--disable-setuid-sandbox',
-                '--no-sandbox',  # Required in some Docker environments
+                '--no-sandbox',  # Required in some server environments
             ]
             
             if self.server_mode:
@@ -141,34 +141,67 @@ class SAMWebScraper:
             
             # Extract description - try multiple approaches
             description_text = None
-            
-            # Method 1: Look for description sections
-            description_patterns = [
-                {'name': 'div', 'attrs': {'data-test': re.compile('description')}},
-                {'name': 'div', 'class': re.compile('description', re.I)},
-                {'name': 'section', 'attrs': {'aria-label': re.compile('description', re.I)}},
-                {'name': 'div', 'class': re.compile('opportunity-content', re.I)}
-            ]
-            
-            for pattern in description_patterns:
-                elements = soup.find_all(**pattern)
-                for elem in elements:
-                    text = elem.get_text(strip=True, separator='\n')
-                    if text and len(text) > 100:  # Meaningful content
-                        description_text = text
-                        logger.info(f"Found description using pattern: {pattern}")
+
+            # Method 1: Click Description tab if present
+            try:
+                desc_link = await page.query_selector('text="Description"')
+                if desc_link:
+                    await desc_link.click()
+                    await asyncio.sleep(2)  # Wait for content to load
+                    logger.info("Clicked Description tab")
+                    # Refresh content after click
+                    content = await page.content()
+                    soup = BeautifulSoup(content, 'html.parser')
+            except Exception as e:
+                logger.info(f"No Description tab or click failed: {e}")
+
+            # Method 2: Extract substantial paragraph content
+            paragraphs = soup.find_all('p')
+            description_paragraphs = []
+
+            for p in paragraphs:
+                p_text = p.get_text().strip()
+                # Filter out navigation, alerts, and boilerplate text
+                if (len(p_text) > 50 and
+                    'official website' not in p_text.lower() and
+                    'skip to main content' not in p_text.lower() and
+                    'sign in' not in p_text.lower() and
+                    '.gov means' not in p_text.lower() and
+                    'site is secure' not in p_text.lower()):
+                    description_paragraphs.append(p_text)
+
+            if description_paragraphs:
+                description_text = '\n\n'.join(description_paragraphs)
+                logger.info(f"Found {len(description_paragraphs)} description paragraphs")
+
+            # Method 3: Look for description sections (legacy approach)
+            if not description_text:
+                description_patterns = [
+                    {'name': 'div', 'attrs': {'data-test': re.compile('description')}},
+                    {'name': 'div', 'class': re.compile('description', re.I)},
+                    {'name': 'section', 'attrs': {'aria-label': re.compile('description', re.I)}},
+                    {'name': 'div', 'class': re.compile('opportunity-content', re.I)}
+                ]
+
+                for pattern in description_patterns:
+                    elements = soup.find_all(**pattern)
+                    for elem in elements:
+                        text = elem.get_text(strip=True, separator='\n')
+                        if text and len(text) > 100:  # Meaningful content
+                            description_text = text
+                            logger.info(f"Found description using pattern: {pattern}")
+                            break
+                    if description_text:
                         break
-                if description_text:
-                    break
-            
-            # Method 2: If no description found, look for main content area
+
+            # Method 4: If no description found, look for main content area
             if not description_text:
                 main_content = soup.find('main') or soup.find('div', {'role': 'main'})
                 if main_content:
                     # Remove navigation and header elements
                     for tag in main_content.find_all(['nav', 'header', 'footer']):
                         tag.decompose()
-                    
+
                     text = main_content.get_text(strip=True, separator='\n')
                     if text and len(text) > 200:
                         description_text = text
@@ -269,9 +302,7 @@ def scrape_sam_opportunity(url: str, headless: bool = True, server_mode: bool = 
         # Common server environment indicators
         server_mode = any([
             os.environ.get('KUBERNETES_SERVICE_HOST'),
-            os.environ.get('DOCKER_CONTAINER'),
-            os.path.exists('/.dockerenv'),
-            not os.environ.get('DISPLAY'),  # No display in servers
+            not os.environ.get('DISPLAY'),  # No display in headless servers
         ])
         if server_mode:
             logger.info("Auto-detected server environment")

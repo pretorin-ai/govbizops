@@ -17,10 +17,10 @@ class SAMGovClient:
     BASE_URL = "https://api.sam.gov/opportunities/v2/search"
     
     # Compliance limits
-    MAX_NAICS_CODES = 3  # Maximum NAICS codes per collection
-    MAX_DAYS_RANGE = 7   # Maximum days to collect at once
+    MAX_NAICS_CODES = 50  # Maximum NAICS codes per collection
+    MAX_DAYS_RANGE = 90   # Maximum days to collect at once
     RATE_LIMIT_DELAY = 2  # Seconds between API calls
-    MAX_DAILY_COLLECTIONS = 1  # Maximum collections per day
+    MAX_DAILY_COLLECTIONS = 100  # Maximum collections per day
     
     def __init__(self, api_key: str, use_alpha: bool = False):
         """

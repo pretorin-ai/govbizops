@@ -14,6 +14,8 @@ setup(
     url="https://github.com/yourusername/govbizops",
     packages=["govbizops"],
     package_dir={"govbizops": "."},
+    package_data={"govbizops": ["templates/*.html", "templates/*.png", "templates/*.md"]},
+    include_package_data=True,
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
@@ -46,8 +48,8 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "govbizops=main:main",
-            "govbizops-setup=setup_playwright:main",
+            "govbizops=govbizops.main:main",
+            "govbizops-setup=govbizops.setup_playwright:main",
         ],
     },
 )

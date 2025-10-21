@@ -16,7 +16,6 @@ async def test_browser():
     
     # Environment info
     print(f"Python version: {sys.version}")
-    print(f"Running in Docker: {os.path.exists('/.dockerenv')}")
     print(f"DISPLAY env: {os.environ.get('DISPLAY', 'Not set')}")
     print(f"User: {os.environ.get('USER', 'Unknown')}")
     
@@ -81,10 +80,9 @@ async def test_browser():
         
         # Common troubleshooting
         print("\nTroubleshooting:")
-        print("1. Increase shared memory: --shm-size=1g")
-        print("2. Add capabilities: --cap-add=SYS_ADMIN")
-        print("3. Check system dependencies in Dockerfile")
-        print("4. Try running as root: --user root")
+        print("1. Make sure Playwright browsers are installed: playwright install chromium")
+        print("2. Check system has required dependencies")
+        print("3. Try running with headless mode disabled for debugging")
         
         return False
 

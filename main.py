@@ -249,6 +249,68 @@ def run_viewer(args):
     simple_viewer.app.run(host='0.0.0.0', port=args.port, debug=args.debug)
 
 
+def run_crm_push(args):
+    """Push collected opportunities to CRM"""
+    # Import CRM client
+    try:
+        from govbizops.crm_client import push_to_crm
+    except ImportError:
+        from crm_client import push_to_crm
+
+    # Get API key from args or environment
+    crm_url = args.crm_url or os.getenv('CRM_URL', 'http://localhost:8000')
+    crm_api_key = args.crm_api_key or os.getenv('CRM_API_KEY')
+
+    if not crm_api_key:
+        logger.error("CRM API key required. Set CRM_API_KEY environment variable")
+        logger.error("or use --crm-api-key argument")
+        logger.error("")
+        logger.error("To get your API key:")
+        logger.error("1. Log in to your CRM")
+        logger.error("2. Go to Settings")
+        logger.error("3. Click 'Generate API Key'")
+        logger.error("4. Copy the key and set it: export CRM_API_KEY=crm_...")
+        sys.exit(1)
+
+    # Get opportunities file path
+    storage_path = args.storage_path or os.path.join(get_data_dir(), 'opportunities.json')
+
+    if not os.path.exists(storage_path):
+        logger.error(f"No opportunities file found at {storage_path}")
+        logger.error("Run 'govbizops collect' first to collect opportunities")
+        sys.exit(1)
+
+    logger.info(f"Pushing opportunities from {storage_path} to CRM at {crm_url}")
+
+    try:
+        result = push_to_crm(
+            crm_url=crm_url,
+            crm_api_key=crm_api_key,
+            opportunities_file=storage_path,
+            auto_create_contacts=not args.no_contacts
+        )
+
+        logger.info("="*50)
+        logger.info("CRM IMPORT RESULTS")
+        logger.info("="*50)
+        logger.info(f"Contracts created: {result['contracts_created']}")
+        logger.info(f"Contracts skipped: {result['contracts_skipped']}")
+        logger.info(f"Contacts created:  {result['contracts_created']}")
+
+        if result.get('errors'):
+            logger.warning(f"Errors ({len(result['errors'])}):")
+            for error in result['errors'][:5]:
+                logger.warning(f"  - {error}")
+            if len(result['errors']) > 5:
+                logger.warning(f"  ... and {len(result['errors']) - 5} more")
+
+        logger.info("="*50)
+
+    except Exception as e:
+        logger.error(f"Failed to push opportunities to CRM: {e}")
+        sys.exit(1)
+
+
 def run_scheduled_collector(args):
     """Run collector on a schedule"""
     logger.info(f"Starting scheduled collector (interval: {args.interval} minutes)")
@@ -309,6 +371,17 @@ def main():
     viewer_parser.add_argument('--debug', action='store_true',
                              help='Run in debug mode')
 
+    # CRM push mode
+    crm_parser = subparsers.add_parser('push-crm', help='Push collected opportunities to Pretorin CRM')
+    crm_parser.add_argument('--crm-url', type=str, default=None,
+                          help='CRM base URL (default: from CRM_URL env var or http://localhost:8000)')
+    crm_parser.add_argument('--crm-api-key', type=str, default=None,
+                          help='CRM API key (default: from CRM_API_KEY env var)')
+    crm_parser.add_argument('--storage-path', type=str, default=None,
+                          help='Path to opportunities JSON file')
+    crm_parser.add_argument('--no-contacts', action='store_true',
+                          help='Do not auto-create contacts from point-of-contact info')
+
     # Diagnostic mode
     diag_parser = subparsers.add_parser('diagnose', help='Run diagnostic tests')
     
@@ -340,6 +413,8 @@ def main():
         run_scheduled_collector(args)
     elif args.mode == 'viewer':
         run_viewer(args)
+    elif args.mode == 'push-crm':
+        run_crm_push(args)
     elif args.mode == 'diagnose':
         # Import and run diagnostic
         try:
@@ -351,7 +426,7 @@ def main():
         sys.exit(0 if success else 1)
     else:
         parser.print_help()
-        
+
         # Show examples
         print("\nExamples:")
         print("  # Collect daily opportunities")
@@ -362,6 +437,9 @@ def main():
         print("  ")
         print("  # Run web viewer")
         print("  govbizops viewer --port 5000")
+        print("  ")
+        print("  # Push collected opportunities to CRM")
+        print("  govbizops push-crm")
 
 
 if __name__ == '__main__':

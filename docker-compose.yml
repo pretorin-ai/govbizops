@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./star-sales-flow/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./star-sales-flow/backend:/app
+    environment:
+      - DATABASE_URL=sqlite:///./crm.db
+
+  frontend:
+    build:
+      context: ./star-sales-flow
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+  scraper:
+    build:
+      context: ./govbizops
+      dockerfile: Dockerfile
+    volumes:
+      - ./govbizops:/app
+      - govbizops-data:/app/data
+      - govbizops-logs:/app/logs
+    environment:
+      - SAM_GOV_API_KEY=${SAM_GOV_API_KEY}
+      - NAICS_CODES=${NAICS_CODES:-541511,541512}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - SCHEDULE_INTERVAL=${SCHEDULE_INTERVAL:-120}
+      - CRM_URL=${CRM_URL:-http://backend:8000}
+      - CRM_API_KEY=${CRM_API_KEY:-}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  govbizops-data:
+  govbizops-logs:

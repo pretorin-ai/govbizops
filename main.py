@@ -10,6 +10,8 @@ import time
 import logging
 import json
 import requests
+import random
+import uuid
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from dotenv import load_dotenv
@@ -221,6 +223,45 @@ def run_collector(args):
     summary = collector.get_summary()
     logger.info(f"Total opportunities in database: {summary['total_opportunities']}")
 
+    # Push new opportunities to CRM if configured
+    crm_url = os.getenv('CRM_URL')
+    crm_api_key = os.getenv('CRM_API_KEY')
+    
+    if crm_url and crm_api_key and new_opportunities:
+        logger.info(f"Pushing {len(new_opportunities)} new opportunities to CRM at {crm_url}")
+        try:
+            # Import CRM client
+            try:
+                from govbizops.crm_client import CRMClient
+            except ImportError:
+                from crm_client import CRMClient
+            
+            client = CRMClient(crm_url, crm_api_key)
+            result = client.import_opportunities(new_opportunities, auto_create_contacts=True)
+            
+            logger.info("="*50)
+            logger.info("CRM IMPORT RESULTS")
+            logger.info("="*50)
+            logger.info(f"Contracts created: {result['contracts_created']}")
+            logger.info(f"Contracts skipped: {result['contracts_skipped']}")
+            logger.info(f"Contacts created:  {result['contacts_created']}")
+            
+            if result.get('errors'):
+                logger.warning(f"Errors ({len(result['errors'])}):")
+                for error in result['errors'][:5]:
+                    logger.warning(f"  - {error}")
+                if len(result['errors']) > 5:
+                    logger.warning(f"  ... and {len(result['errors']) - 5} more")
+            
+            logger.info("="*50)
+        except Exception as e:
+            logger.error(f"Failed to push opportunities to CRM: {e}")
+            logger.exception("Full traceback:")
+            # Don't fail the collection if CRM push fails
+    elif new_opportunities and (not crm_url or not crm_api_key):
+        logger.info("CRM_URL and/or CRM_API_KEY not configured, skipping CRM push")
+        logger.info("Set CRM_URL and CRM_API_KEY environment variables to enable automatic CRM integration")
+
     # Send Slack notification if enabled and there are new opportunities
     notify_enabled = hasattr(args, 'notify') and args.notify
     logger.info(f"Slack notifications enabled: {notify_enabled}")
@@ -311,6 +352,197 @@ def run_crm_push(args):
         sys.exit(1)
 
 
+def generate_mock_opportunities(count: int = 3, naics_codes: List[str] = None) -> List[Dict[str, Any]]:
+    """
+    Generate mock SAM.gov opportunities for testing
+    
+    Args:
+        count: Number of mock opportunities to generate
+        naics_codes: List of NAICS codes to use (defaults to test codes)
+        
+    Returns:
+        List of mock opportunity dictionaries
+    """
+    import random
+    import uuid
+    
+    if naics_codes is None:
+        naics_codes = ["541511", "541512"]
+    
+    mock_titles = [
+        "IT Services and Support for Federal Agency",
+        "Cloud Infrastructure Modernization Project",
+        "Cybersecurity Assessment and Implementation",
+        "Software Development and Maintenance Services",
+        "Data Analytics and Business Intelligence Platform",
+        "Network Infrastructure Upgrade and Support",
+        "Enterprise Application Development",
+        "IT Help Desk and Technical Support Services",
+        "Database Administration and Management",
+        "Web Application Development and Hosting"
+    ]
+    
+    mock_descriptions = [
+        "The contractor shall provide comprehensive IT services including system administration, help desk support, and technical assistance for federal agency operations.",
+        "This solicitation seeks a qualified contractor to modernize cloud infrastructure, migrate legacy systems, and provide ongoing cloud management services.",
+        "Services include cybersecurity risk assessment, implementation of security controls, penetration testing, and ongoing security monitoring.",
+        "Development and maintenance of custom software applications, including requirements analysis, design, coding, testing, and deployment.",
+        "Implementation of a data analytics platform to support business intelligence, reporting, and data visualization needs.",
+        "Upgrade and support of network infrastructure including routers, switches, firewalls, and wireless access points.",
+        "Development of enterprise-level applications using modern frameworks and technologies, with focus on scalability and security.",
+        "24/7 help desk support services including ticket management, remote troubleshooting, and user training.",
+        "Database administration services including performance tuning, backup and recovery, security management, and capacity planning.",
+        "Development and hosting of web applications with responsive design, accessibility compliance, and integration capabilities."
+    ]
+    
+    mock_contacts = [
+        {"fullName": "John Smith", "email": "john.smith@agency.gov", "phone": "202-555-0101", "type": "Primary"},
+        {"fullName": "Jane Doe", "email": "jane.doe@agency.gov", "phone": "202-555-0102", "type": "Secondary"},
+        {"fullName": "Robert Johnson", "email": "robert.johnson@agency.gov", "phone": "202-555-0103", "type": "Primary"},
+        {"fullName": "Sarah Williams", "email": "sarah.williams@agency.gov", "phone": "202-555-0104", "type": "Contracting Officer"},
+    ]
+    
+    opportunities = []
+    now = datetime.now()
+    
+    for i in range(count):
+        # Generate unique notice ID
+        notice_id = f"TEST-{uuid.uuid4().hex[:8].upper()}"
+        
+        # Random dates within the past week
+        days_ago = random.randint(0, 7)
+        posted_date = (now - timedelta(days=days_ago)).isoformat() + "Z"
+        deadline_days = random.randint(14, 60)
+        deadline = (now + timedelta(days=deadline_days)).isoformat() + "Z"
+        
+        # Random selection
+        title = random.choice(mock_titles)
+        description = random.choice(mock_descriptions)
+        naics = random.choice(naics_codes)
+        contact = random.choice(mock_contacts)
+        solicitation_num = f"SOL-{now.year}-{random.randint(1000, 9999)}"
+        
+        opp = {
+            "noticeId": notice_id,
+            "title": title,
+            "solicitationNumber": solicitation_num,
+            "description": description,
+            "responseDeadLine": deadline,
+            "postedDate": posted_date,
+            "naicsCode": naics,
+            "uiLink": f"https://sam.gov/opp/{notice_id}/view",
+            "pointOfContact": [contact],
+            "type": "Solicitation"  # Important: must have "Solicitation" in type
+        }
+        
+        opportunities.append(opp)
+    
+    return opportunities
+
+
+def run_test_collector(args):
+    """Run collector with mock/test data"""
+    logger.info("="*60)
+    logger.info("TEST MODE: Generating mock opportunities")
+    logger.info("="*60)
+    
+    # Parse NAICS codes
+    if args.naics_codes:
+        naics_codes = args.naics_codes.split(',')
+    elif os.getenv('NAICS_CODES'):
+        naics_codes = os.getenv('NAICS_CODES').split(',')
+    else:
+        naics_codes = ["541511", "541512"]
+    
+    # Generate mock opportunities
+    count = args.count if hasattr(args, 'count') else 3
+    logger.info(f"Generating {count} mock opportunities with NAICS codes: {', '.join(naics_codes)}")
+    
+    mock_opportunities = generate_mock_opportunities(count=count, naics_codes=naics_codes)
+    
+    # Initialize collector (API key not needed for test mode, but required by constructor)
+    # Use a dummy key for test mode
+    api_key = os.environ.get('SAM_GOV_API_KEY', 'TEST_MODE_DUMMY_KEY')
+    storage_path = args.storage_path or os.path.join(get_data_dir(), 'opportunities.json')
+    
+    collector = OpportunityCollector(
+        api_key=api_key,
+        naics_codes=naics_codes,
+        storage_path=storage_path
+    )
+    
+    # Manually add mock opportunities as if they were collected
+    new_opportunities = []
+    for opp in mock_opportunities:
+        notice_id = opp.get("noticeId")
+        if notice_id and notice_id not in collector.opportunities:
+            collector.opportunities[notice_id] = {
+                "collected_date": datetime.now().isoformat(),
+                "data": opp
+            }
+            new_opportunities.append(opp)
+    
+    if new_opportunities:
+        collector._save_opportunities()
+        logger.info(f"✓ Stored {len(new_opportunities)} mock opportunities")
+    else:
+        logger.info("No new opportunities (all duplicates)")
+        return 0
+    
+    # Get summary
+    summary = collector.get_summary()
+    logger.info(f"Total opportunities in database: {summary['total_opportunities']}")
+    
+    # Push to CRM if configured
+    crm_url = os.getenv('CRM_URL')
+    crm_api_key = os.getenv('CRM_API_KEY')
+    
+    if crm_url and crm_api_key and new_opportunities:
+        logger.info(f"Pushing {len(new_opportunities)} mock opportunities to CRM at {crm_url}")
+        try:
+            try:
+                from govbizops.crm_client import CRMClient
+            except ImportError:
+                from crm_client import CRMClient
+            
+            client = CRMClient(crm_url, crm_api_key)
+            result = client.import_opportunities(new_opportunities, auto_create_contacts=True)
+            
+            logger.info("="*50)
+            logger.info("CRM IMPORT RESULTS")
+            logger.info("="*50)
+            logger.info(f"Contracts created: {result['contracts_created']}")
+            logger.info(f"Contracts skipped: {result['contracts_skipped']}")
+            logger.info(f"Contacts created:  {result['contacts_created']}")
+            
+            if result.get('errors'):
+                logger.warning(f"Errors ({len(result['errors'])}):")
+                for error in result['errors'][:5]:
+                    logger.warning(f"  - {error}")
+                if len(result['errors']) > 5:
+                    logger.warning(f"  ... and {len(result['errors']) - 5} more")
+            
+            logger.info("="*50)
+        except Exception as e:
+            logger.error(f"Failed to push opportunities to CRM: {e}")
+            logger.exception("Full traceback:")
+    elif new_opportunities and (not crm_url or not crm_api_key):
+        logger.info("CRM_URL and/or CRM_API_KEY not configured, skipping CRM push")
+        logger.info("Set CRM_URL and CRM_API_KEY environment variables to test CRM integration")
+    
+    # Send Slack notification if enabled
+    notify_enabled = hasattr(args, 'notify') and args.notify
+    if notify_enabled and new_opportunities:
+        logger.info("Sending Slack notification for mock opportunities")
+        send_slack_notification(new_opportunities)
+    
+    logger.info("="*60)
+    logger.info("TEST MODE: Complete")
+    logger.info("="*60)
+    
+    return len(new_opportunities)
+
+
 def run_scheduled_collector(args):
     """Run collector on a schedule"""
     logger.info(f"Starting scheduled collector (interval: {args.interval} minutes)")
@@ -385,6 +617,17 @@ def main():
     # Diagnostic mode
     diag_parser = subparsers.add_parser('diagnose', help='Run diagnostic tests')
     
+    # Test mode - generate mock opportunities
+    test_parser = subparsers.add_parser('test', help='Generate mock opportunities for testing (no SAM.gov API calls)')
+    test_parser.add_argument('--count', type=int, default=3,
+                           help='Number of mock opportunities to generate (default: 3)')
+    test_parser.add_argument('--naics-codes', type=str,
+                           help='Comma-separated NAICS codes (default from NAICS_CODES env var or 541511,541512)')
+    test_parser.add_argument('--storage-path', type=str, default=None,
+                           help='Path to store opportunities')
+    test_parser.add_argument('--notify', action='store_true',
+                           help='Send Slack notifications for mock opportunities (requires SLACK_WEBHOOK_URL)')
+    
     args = parser.parse_args()
 
     # Debug environment loading
@@ -394,8 +637,8 @@ def main():
     if os.environ.get('SLACK_WEBHOOK_URL'):
         logger.info(f"SLACK_WEBHOOK_URL value: {os.environ.get('SLACK_WEBHOOK_URL')[:50]}...")
 
-    # Ensure required environment variables
-    if not os.environ.get('SAM_GOV_API_KEY'):
+    # Ensure required environment variables (except for test mode)
+    if args.mode != 'test' and not os.environ.get('SAM_GOV_API_KEY'):
         logger.error("SAM_GOV_API_KEY environment variable is required")
         sys.exit(1)
     
@@ -415,6 +658,8 @@ def main():
         run_viewer(args)
     elif args.mode == 'push-crm':
         run_crm_push(args)
+    elif args.mode == 'test':
+        run_test_collector(args)
     elif args.mode == 'diagnose':
         # Import and run diagnostic
         try:
@@ -434,6 +679,9 @@ def main():
         print("  ")
         print("  # Run scheduled collection every 2 hours")
         print("  govbizops schedule --interval 120")
+        print("  ")
+        print("  # Generate mock opportunities for testing (no SAM.gov API calls)")
+        print("  govbizops test --count 5")
         print("  ")
         print("  # Run web viewer")
         print("  govbizops viewer --port 5000")

@@ -591,6 +591,8 @@ def main():
                                 help='Collection interval in minutes (default: 60)')
     scheduled_parser.add_argument('--naics-codes', type=str,
                                 help=f'Comma-separated NAICS codes (max 50, default from NAICS_CODES env var or 541511,541512)')
+    scheduled_parser.add_argument('--days-back', type=int, default=1,
+                                help=f'Number of days to look back (max 90, default: 1)')
     scheduled_parser.add_argument('--storage-path', type=str, default=None,
                                 help='Path to store opportunities')
     scheduled_parser.add_argument('--notify', action='store_true',

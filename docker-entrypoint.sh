@@ -1,10 +1,6 @@
 #!/bin/bash
 set -e
 
-# Install/update the package in editable mode (in case source code changed)
-echo "Installing govbizops package..."
-pip install -e . --quiet
-
 # Create data and logs directories if they don't exist
 mkdir -p /app/data /app/logs
 

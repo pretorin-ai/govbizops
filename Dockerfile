@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Install the package in editable mode
-RUN pip install -e .
+# Install the package
+RUN pip install .
 
 # Install Playwright browsers (ensure they're available)
 RUN playwright install chromium

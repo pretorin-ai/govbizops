@@ -35,6 +35,7 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
     "black>=23.0.0",
     "flake8>=6.0.0",
     "hatch",
@@ -47,6 +48,24 @@ govbizops-setup = "govbizops.setup_playwright:main"
 [project.urls]
 Homepage = "https://github.com/pretorin-ai/govbizops"
 Repository = "https://github.com/pretorin-ai/govbizops"
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=govbizops --cov-report=term-missing"
+
+[tool.coverage.run]
+omit = ["src/govbizops/__main__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__",
+    "pragma: no cover",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/govbizops"]

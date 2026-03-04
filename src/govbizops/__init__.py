@@ -9,4 +9,10 @@ from .collector import OpportunityCollector
 from .solicitation_analyzer import SolicitationAnalyzer
 from .sam_scraper import SAMWebScraper, scrape_sam_opportunity
 
-__all__ = ["SAMGovClient", "OpportunityCollector", "SolicitationAnalyzer", "SAMWebScraper", "scrape_sam_opportunity"]
+__all__ = [
+    "SAMGovClient",
+    "OpportunityCollector",
+    "SolicitationAnalyzer",
+    "SAMWebScraper",
+    "scrape_sam_opportunity",
+]

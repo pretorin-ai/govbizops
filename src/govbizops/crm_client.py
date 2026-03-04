@@ -22,12 +22,10 @@ class CRMClient:
             base_url: Base URL of the CRM API (e.g., http://localhost:8000)
             api_key: CRM API key for authentication
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.session = requests.Session()
-        self.session.headers.update({
-            "Authorization": f"Bearer {api_key}"
-        })
+        self.session.headers.update({"Authorization": f"Bearer {api_key}"})
 
     def login(self) -> bool:
         """
@@ -48,9 +46,7 @@ class CRMClient:
             return False
 
     def import_opportunities(
-        self,
-        opportunities: List[Dict[str, Any]],
-        auto_create_contacts: bool = True
+        self, opportunities: List[Dict[str, Any]], auto_create_contacts: bool = True
     ) -> Dict[str, Any]:
         """
         Import SAM.gov opportunities to CRM
@@ -80,28 +76,29 @@ class CRMClient:
                 "uiLink": opp.get("uiLink"),
                 "pointOfContact": opp.get("pointOfContact", []),
                 "source": "SAM.gov",
-                "notes": ""
+                "notes": "",
             }
             transformed_opps.append(transformed)
 
         payload = {
             "opportunities": transformed_opps,
-            "auto_create_contacts": auto_create_contacts
+            "auto_create_contacts": auto_create_contacts,
         }
 
         try:
             response = self.session.post(
-                f"{self.base_url}/contracts/import/samgov",
-                json=payload
+                f"{self.base_url}/contracts/import/samgov", json=payload
             )
             response.raise_for_status()
 
             result = response.json()
-            logger.info(f"Import complete: {result['contracts_created']} contracts created, "
-                       f"{result['contracts_skipped']} skipped, "
-                       f"{result['contacts_created']} contacts created")
+            logger.info(
+                f"Import complete: {result['contracts_created']} contracts created, "
+                f"{result['contracts_skipped']} skipped, "
+                f"{result['contacts_created']} contacts created"
+            )
 
-            if result.get('errors'):
+            if result.get("errors"):
                 logger.warning(f"Errors during import: {result['errors']}")
 
             return result
@@ -113,7 +110,7 @@ class CRMClient:
     def push_collected_opportunities(
         self,
         storage_path: str = "opportunities_data.json",
-        auto_create_contacts: bool = True
+        auto_create_contacts: bool = True,
     ) -> Dict[str, Any]:
         """
         Push all collected opportunities from storage to CRM
@@ -126,7 +123,7 @@ class CRMClient:
             Response dictionary with import results
         """
         try:
-            with open(storage_path, 'r') as f:
+            with open(storage_path, "r") as f:
                 stored_data = json.load(f)
 
             # Extract just the opportunity data
@@ -144,7 +141,7 @@ def push_to_crm(
     crm_url: str,
     crm_api_key: str,
     opportunities_file: str = "opportunities_data.json",
-    auto_create_contacts: bool = True
+    auto_create_contacts: bool = True,
 ) -> Dict[str, Any]:
     """
     Convenience function to push opportunities to CRM
@@ -170,7 +167,7 @@ if __name__ == "__main__":
     # Configure logging
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
     # Get API key from environment
@@ -200,24 +197,24 @@ if __name__ == "__main__":
             crm_url=crm_url,
             crm_api_key=crm_api_key,
             opportunities_file=str(opportunities_file),
-            auto_create_contacts=True
+            auto_create_contacts=True,
         )
 
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("CRM IMPORT RESULTS")
-        print("="*50)
+        print("=" * 50)
         print(f"Contracts created: {result['contracts_created']}")
         print(f"Contracts skipped: {result['contracts_skipped']}")
         print(f"Contacts created:  {result['contacts_created']}")
 
-        if result.get('errors'):
+        if result.get("errors"):
             print(f"\nErrors ({len(result['errors'])}):")
-            for error in result['errors'][:5]:  # Show first 5 errors
+            for error in result["errors"][:5]:  # Show first 5 errors
                 print(f"  - {error}")
-            if len(result['errors']) > 5:
+            if len(result["errors"]) > 5:
                 print(f"  ... and {len(result['errors']) - 5} more")
 
-        print("="*50)
+        print("=" * 50)
 
     except Exception as e:
         print(f"Failed to push opportunities to CRM: {e}")

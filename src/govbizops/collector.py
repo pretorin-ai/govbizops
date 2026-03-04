@@ -129,9 +129,6 @@ class OpportunityCollector:
                 notice_id = opp.get("noticeId")
                 opp_type = opp.get("type", "")
 
-                if not notice_id:
-                    continue
-
                 if notice_id in self.opportunities:
                     already_collected += 1
                     continue

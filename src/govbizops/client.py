@@ -104,10 +104,6 @@ class SAMGovClient:
         self._validate_naics_codes(naics_codes)
         self._validate_date_range(posted_from, posted_to)
 
-        # Validate date range (max 1 year)
-        if posted_to - posted_from > timedelta(days=365):
-            raise ValueError("Date range cannot exceed 1 year")
-
         params = {
             "postedFrom": posted_from.strftime("%m/%d/%Y"),
             "postedTo": posted_to.strftime("%m/%d/%Y"),
@@ -163,10 +159,6 @@ class SAMGovClient:
         Returns:
             List of all opportunities
         """
-        # Validate inputs for compliance
-        self._validate_naics_codes(naics_codes)
-        self._validate_date_range(posted_from, posted_to)
-
         all_opportunities = []
         offset = 0
         limit = 500  # Reduced from 1000 to be more conservative

@@ -146,35 +146,6 @@ class TestSendSlackNotification:
             result = send_slack_notification([opp])
         assert result is True
 
-    def test_deadline_formatting_exception(self, monkeypatch):
-        """Trigger the bare except on deadline[:10]."""
-        monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/test")
-
-        class BadSlice:
-            """An object that is truthy and != 'N/A' but fails on [:10]."""
-
-            def __bool__(self):
-                return True
-
-            def __eq__(self, other):
-                return False
-
-            def __getitem__(self, key):
-                raise TypeError("no slicing")
-
-        opp = {
-            "title": "t",
-            "noticeId": "n",
-            "postedDate": "2025-01-15",
-            "responseDeadLine": BadSlice(),
-            "naicsCode": "541511",
-        }
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        with patch("govbizops.main.requests.post", return_value=mock_resp):
-            result = send_slack_notification([opp])
-        assert result is True
-
 
 class TestRunCollector:
     @patch("time.sleep")

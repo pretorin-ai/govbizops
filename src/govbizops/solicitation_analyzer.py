@@ -436,104 +436,87 @@ Keep the response professional and specific to the solicitation requirements. Fo
         Returns:
             Opportunity data or None if not found
         """
-        try:
-            from datetime import datetime, timedelta
+        from datetime import datetime, timedelta
 
-            # SAM.gov API requires PostedFrom and PostedTo parameters
-            # Try multiple date ranges since we don't know when this was posted
-            today = datetime.now()
+        # SAM.gov API requires PostedFrom and PostedTo parameters
+        # Try multiple date ranges since we don't know when this was posted
+        today = datetime.now()
 
-            date_ranges = [
-                # Recent (last 3 months)
-                (
-                    (today - timedelta(days=90)).strftime("%m/%d/%Y"),
-                    today.strftime("%m/%d/%Y"),
-                ),
-                # Last 6 months
-                (
-                    (today - timedelta(days=180)).strftime("%m/%d/%Y"),
-                    today.strftime("%m/%d/%Y"),
-                ),
-                # Last year
-                (
-                    (today - timedelta(days=365)).strftime("%m/%d/%Y"),
-                    today.strftime("%m/%d/%Y"),
-                ),
-                # This year so far
-                (f"01/01/{today.year}", today.strftime("%m/%d/%Y")),
-            ]
+        date_ranges = [
+            # Recent (last 3 months)
+            (
+                (today - timedelta(days=90)).strftime("%m/%d/%Y"),
+                today.strftime("%m/%d/%Y"),
+            ),
+            # Last 6 months
+            (
+                (today - timedelta(days=180)).strftime("%m/%d/%Y"),
+                today.strftime("%m/%d/%Y"),
+            ),
+            # Last year
+            (
+                (today - timedelta(days=365)).strftime("%m/%d/%Y"),
+                today.strftime("%m/%d/%Y"),
+            ),
+            # This year so far
+            (f"01/01/{today.year}", today.strftime("%m/%d/%Y")),
+        ]
 
-            base_url = "https://api.sam.gov/opportunities/v2/search"
+        base_url = "https://api.sam.gov/opportunities/v2/search"
 
-            # Try different search approaches with multiple date ranges
-            search_variations = [
-                {"q": opportunity_id},
-                {"noticeId": opportunity_id},
-                {"opportunityId": opportunity_id},
-            ]
+        # Try different search approaches with multiple date ranges
+        search_variations = [
+            {"q": opportunity_id},
+            {"noticeId": opportunity_id},
+            {"opportunityId": opportunity_id},
+        ]
 
-            for posted_from, posted_to in date_ranges:
-                logger.info(f"Trying date range: {posted_from} to {posted_to}")
+        for posted_from, posted_to in date_ranges:
+            logger.info(f"Trying date range: {posted_from} to {posted_to}")
 
-                # Base parameters for this date range
-                base_params = {
-                    "api_key": self.api_key,
-                    "postedFrom": posted_from,
-                    "postedTo": posted_to,
-                    "limit": 1000,
-                }
+            # Base parameters for this date range
+            base_params = {
+                "api_key": self.api_key,
+                "postedFrom": posted_from,
+                "postedTo": posted_to,
+                "limit": 1000,
+            }
 
-                for variation in search_variations:
-                    try:
-                        params = {**base_params, **variation}
-                        logger.info(f"Searching with: {variation}")
+            for variation in search_variations:
+                try:
+                    params = {**base_params, **variation}
+                    logger.info(f"Searching with: {variation}")
 
-                        response = self.session.get(base_url, params=params)
+                    response = self.session.get(base_url, params=params)
 
-                        if response.status_code == 200:
-                            data = response.json()
-                            opportunities = data.get("opportunitiesData", [])
+                    if response.status_code == 200:
+                        data = response.json()
+                        opportunities = data.get("opportunitiesData", [])
 
-                            logger.info(
-                                f"Found {len(opportunities)} opportunities in search"
-                            )
+                        logger.info(
+                            f"Found {len(opportunities)} opportunities in search"
+                        )
 
-                            # Look for exact match first
-                            for opp in opportunities:
-                                if (
-                                    opp.get("noticeId") == opportunity_id
-                                    or opp.get("opportunityId") == opportunity_id
-                                    or opportunity_id in str(opp.get("uiLink", ""))
-                                ):
-                                    logger.info(
-                                        f"Found exact match: {opp.get('title')}"
-                                    )
-                                    return opp
+                        for opp in opportunities:
+                            if (
+                                opp.get("noticeId") == opportunity_id
+                                or opp.get("opportunityId") == opportunity_id
+                                or opportunity_id in str(opp.get("uiLink", ""))
+                            ):
+                                logger.info(f"Found match: {opp.get('title')}")
+                                return opp
 
-                            # If no exact match but we have results, check if any contain the ID
-                            for opp in opportunities:
-                                ui_link = opp.get("uiLink", "")
-                                if opportunity_id in ui_link:
-                                    logger.info(
-                                        f"Found match by URL: {opp.get('title')}"
-                                    )
-                                    return opp
+                    else:
+                        logger.warning(
+                            f"API request failed with status {response.status_code}: {response.text}"
+                        )
 
-                        else:
-                            logger.warning(
-                                f"API request failed with status {response.status_code}: {response.text}"
-                            )
+                except Exception as e:
+                    logger.warning(f"Search attempt failed: {e}")
+                    continue
 
-                    except Exception as e:
-                        logger.warning(f"Search attempt failed: {e}")
-                        continue
-
-            logger.warning(f"No opportunity found for ID: {opportunity_id}")
-            return None
-
-        except Exception as e:
-            logger.error(f"Error fetching opportunity by ID {opportunity_id}: {e}")
-            return None
+        logger.warning(f"No opportunity found for ID: {opportunity_id}")
+        return None
 
     def analyze_by_url(self, sam_url: str) -> Dict[str, Any]:
         """

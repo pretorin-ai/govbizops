@@ -157,15 +157,6 @@ class TestSearchOpportunities:
             with pytest.raises(Exception, match="403"):
                 client.search_opportunities(now - timedelta(days=1), now)
 
-    @patch("time.sleep")
-    def test_date_range_exceeds_year(self, mock_sleep):
-        client = SAMGovClient("key")
-        now = datetime.now()
-        # Must bypass _validate_date_range (90-day) to reach the 365-day check
-        with patch.object(client, "_validate_date_range"):
-            with pytest.raises(ValueError, match="cannot exceed 1 year"):
-                client.search_opportunities(now - timedelta(days=400), now)
-
 
 class TestGetAllOpportunities:
     @patch("time.sleep")

@@ -91,12 +91,9 @@ def send_slack_notification(opportunities: List[Dict[str, Any]]) -> bool:
             naics = opp.get("naicsCode", "N/A")
             ui_link = opp.get("uiLink", "")
 
-            # Format deadline
+            # Format deadline to just the date part
             if deadline and deadline != "N/A":
-                try:
-                    deadline = deadline[:10]  # Just the date part
-                except:
-                    pass
+                deadline = deadline[:10]
 
             # Create opportunity block
             opp_block = {

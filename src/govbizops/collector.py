@@ -9,10 +9,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
 
-try:
-    from .client import SAMGovClient
-except ImportError:
-    from client import SAMGovClient
+from .client import SAMGovClient
 
 logger = logging.getLogger(__name__)
 

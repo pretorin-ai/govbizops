@@ -17,10 +17,6 @@ from dotenv import load_dotenv
 # Load environment variables from .env file in current working directory
 load_dotenv(override=False)
 
-# Add the parent directory to Python path for local runs
-if __name__ == '__main__':
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 # Configure logging
 log_dir = os.path.join(os.getcwd(), 'logs')
 os.makedirs(log_dir, exist_ok=True)
@@ -35,15 +31,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import govbizops components
-try:
-    # Try package imports first (for installed package)
-    from govbizops.client import SAMGovClient
-    from govbizops.collector import OpportunityCollector
-except ImportError:
-    # Fall back to direct imports (for script usage)
-    from client import SAMGovClient
-    from collector import OpportunityCollector
+from govbizops.client import SAMGovClient
+from govbizops.collector import OpportunityCollector
 
 
 def get_data_dir():
@@ -240,22 +229,15 @@ def run_viewer(args):
     """Run the simple web viewer"""
     logger.info(f"Starting web viewer on port {args.port}")
 
-    # Import Flask app from simple_viewer
-    try:
-        from govbizops import simple_viewer
-    except ImportError:
-        import simple_viewer
+    from govbizops import simple_viewer
 
-    simple_viewer.app.run(host='0.0.0.0', port=args.port, debug=args.debug)
+    host = '127.0.0.1' if args.debug else '0.0.0.0'
+    simple_viewer.app.run(host=host, port=args.port, debug=args.debug)
 
 
 def run_crm_push(args):
     """Push collected opportunities to CRM"""
-    # Import CRM client
-    try:
-        from govbizops.crm_client import push_to_crm
-    except ImportError:
-        from crm_client import push_to_crm
+    from govbizops.crm_client import push_to_crm
 
     # Get API key from args or environment
     crm_url = args.crm_url or os.getenv('CRM_URL', 'http://localhost:8000')
@@ -295,7 +277,7 @@ def run_crm_push(args):
         logger.info("="*50)
         logger.info(f"Contracts created: {result['contracts_created']}")
         logger.info(f"Contracts skipped: {result['contracts_skipped']}")
-        logger.info(f"Contacts created:  {result['contracts_created']}")
+        logger.info(f"Contacts created:  {result['contacts_created']}")
 
         if result.get('errors'):
             logger.warning(f"Errors ({len(result['errors'])}):")
@@ -391,8 +373,6 @@ def main():
     logger.info(f"Current working directory: {os.getcwd()}")
     logger.info(f"SAM_GOV_API_KEY loaded: {bool(os.environ.get('SAM_GOV_API_KEY'))}")
     logger.info(f"SLACK_WEBHOOK_URL loaded: {bool(os.environ.get('SLACK_WEBHOOK_URL'))}")
-    if os.environ.get('SLACK_WEBHOOK_URL'):
-        logger.info(f"SLACK_WEBHOOK_URL value: {os.environ.get('SLACK_WEBHOOK_URL')[:50]}...")
 
     # Ensure required environment variables
     if not os.environ.get('SAM_GOV_API_KEY'):
@@ -416,11 +396,7 @@ def main():
     elif args.mode == 'push-crm':
         run_crm_push(args)
     elif args.mode == 'diagnose':
-        # Import and run diagnostic
-        try:
-            from govbizops import diagnose_browser
-        except ImportError:
-            import diagnose_browser
+        from govbizops import diagnose_browser
         import asyncio
         success = asyncio.run(diagnose_browser.test_browser())
         sys.exit(0 if success else 1)

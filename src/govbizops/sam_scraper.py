@@ -54,8 +54,6 @@ class SAMWebScraper:
                 # Additional server optimizations
                 browser_args.extend([
                     '--disable-gpu',  # No GPU in most servers
-                    '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process',
                     '--disable-blink-features=AutomationControlled',
                     '--window-size=1920,1080',  # Fixed size for consistency
                     '--start-maximized',
@@ -127,7 +125,7 @@ class SAMWebScraper:
                     content_found = True
                     logger.info(f"Found content with selector: {selector}")
                     break
-                except:
+                except Exception:
                     continue
             
             if not content_found:

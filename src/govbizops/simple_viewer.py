@@ -3,26 +3,20 @@ Simple viewer for opportunities.json
 """
 
 from flask import Flask, render_template, jsonify, request
+from markupsafe import escape
 import json
 import os
+from importlib import resources
 from dotenv import load_dotenv
 
-try:
-    from govbizops.sam_scraper import scrape_sam_opportunity
-except ImportError:
-    from sam_scraper import scrape_sam_opportunity
+from govbizops.sam_scraper import scrape_sam_opportunity
 
 load_dotenv()
 
-# Configure Flask to use templates folder for both templates and static files
-import pkg_resources
-try:
-    # When installed as package
-    template_folder = pkg_resources.resource_filename('govbizops', 'templates')
-    app = Flask(__name__, template_folder=template_folder, static_folder=template_folder)
-except:
-    # When running directly
-    app = Flask(__name__, static_folder='templates')
+# Configure Flask to use the package templates folder
+_templates_ref = resources.files('govbizops').joinpath('templates')
+template_folder = str(_templates_ref)
+app = Flask(__name__, template_folder=template_folder, static_folder=template_folder)
 
 
 def get_data_dir():
@@ -35,7 +29,7 @@ def index():
     json_file = os.path.join(get_data_dir(), 'opportunities.json')
 
     if not os.path.exists(json_file):
-        return f"<h1>Error</h1><p>File '{json_file}' not found. Run the collector first.</p>"
+        return f"<h1>Error</h1><p>File '{escape(json_file)}' not found. Run the collector first.</p>"
     
     try:
         with open(json_file, 'r') as f:
@@ -56,7 +50,7 @@ def index():
                              total=len(opportunities))
     
     except Exception as e:
-        return f"<h1>Error</h1><p>Error reading JSON file: {str(e)}</p>"
+        return f"<h1>Error</h1><p>Error reading JSON file: {escape(str(e))}</p>"
 
 @app.route('/export/<notice_id>')
 def export_opportunity(notice_id):

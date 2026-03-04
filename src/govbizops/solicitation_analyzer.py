@@ -8,18 +8,10 @@ import logging
 from typing import Dict, List, Any, Optional
 from openai import OpenAI
 import os
-import sys
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Add current directory to path if running as script
-if __name__ == "__main__" or not __package__:
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-try:
-    from .sam_scraper import scrape_sam_opportunity
-except ImportError:
-    from sam_scraper import scrape_sam_opportunity
+from .sam_scraper import scrape_sam_opportunity
 
 load_dotenv()
 

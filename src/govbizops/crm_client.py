@@ -3,10 +3,13 @@ CRM client for posting SAM.gov opportunities to Pretorin CRM
 """
 
 import requests
-import json
-from typing import List, Dict, Any, Optional
 import logging
+from typing import List, Dict, Any, Optional
 from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from .database import Opportunity
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +25,10 @@ class CRMClient:
             base_url: Base URL of the CRM API (e.g., http://localhost:8000)
             api_key: CRM API key for authentication
         """
-        self.base_url = base_url.rstrip('/')
+        self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.session = requests.Session()
-        self.session.headers.update({
-            "Authorization": f"Bearer {api_key}"
-        })
+        self.session.headers.update({"Authorization": f"Bearer {api_key}"})
 
     def login(self) -> bool:
         """
@@ -37,7 +38,6 @@ class CRMClient:
             True if API key is valid, False otherwise
         """
         try:
-            # Test the API key by getting user info
             response = self.session.get(f"{self.base_url}/auth/me")
             response.raise_for_status()
             logger.info("Successfully authenticated with CRM API key")
@@ -48,9 +48,7 @@ class CRMClient:
             return False
 
     def import_opportunities(
-        self,
-        opportunities: List[Dict[str, Any]],
-        auto_create_contacts: bool = True
+        self, opportunities: List[Dict[str, Any]], auto_create_contacts: bool = True
     ) -> Dict[str, Any]:
         """
         Import SAM.gov opportunities to CRM
@@ -62,11 +60,9 @@ class CRMClient:
         Returns:
             Response dictionary with import results
         """
-        # Validate API key before importing
         if not self.login():
             raise Exception("Failed to authenticate with CRM API key")
 
-        # Transform opportunities to match CRM schema
         transformed_opps = []
         for opp in opportunities:
             transformed = {
@@ -80,28 +76,29 @@ class CRMClient:
                 "uiLink": opp.get("uiLink"),
                 "pointOfContact": opp.get("pointOfContact", []),
                 "source": "SAM.gov",
-                "notes": ""
+                "notes": "",
             }
             transformed_opps.append(transformed)
 
         payload = {
             "opportunities": transformed_opps,
-            "auto_create_contacts": auto_create_contacts
+            "auto_create_contacts": auto_create_contacts,
         }
 
         try:
             response = self.session.post(
-                f"{self.base_url}/contracts/import/samgov",
-                json=payload
+                f"{self.base_url}/contracts/import/samgov", json=payload
             )
             response.raise_for_status()
 
             result = response.json()
-            logger.info(f"Import complete: {result['contracts_created']} contracts created, "
-                       f"{result['contracts_skipped']} skipped, "
-                       f"{result['contacts_created']} contacts created")
+            logger.info(
+                f"Import complete: {result['contracts_created']} contracts created, "
+                f"{result['contracts_skipped']} skipped, "
+                f"{result['contacts_created']} contacts created"
+            )
 
-            if result.get('errors'):
+            if result.get("errors"):
                 logger.warning(f"Errors during import: {result['errors']}")
 
             return result
@@ -112,25 +109,22 @@ class CRMClient:
 
     def push_collected_opportunities(
         self,
-        storage_path: str = "opportunities_data.json",
-        auto_create_contacts: bool = True
+        db_session: Session,
+        auto_create_contacts: bool = True,
     ) -> Dict[str, Any]:
         """
-        Push all collected opportunities from storage to CRM
+        Push all collected opportunities from database to CRM
 
         Args:
-            storage_path: Path to the opportunities JSON file
+            db_session: SQLAlchemy session to query opportunities
             auto_create_contacts: Whether to automatically create contacts
 
         Returns:
             Response dictionary with import results
         """
         try:
-            with open(storage_path, 'r') as f:
-                stored_data = json.load(f)
-
-            # Extract just the opportunity data
-            opportunities = [item["data"] for item in stored_data.values()]
+            all_opps = db_session.query(Opportunity).all()
+            opportunities = [opp.to_dict() for opp in all_opps]
 
             logger.info(f"Pushing {len(opportunities)} opportunities to CRM")
             return self.import_opportunities(opportunities, auto_create_contacts)
@@ -143,8 +137,8 @@ class CRMClient:
 def push_to_crm(
     crm_url: str,
     crm_api_key: str,
-    opportunities_file: str = "opportunities_data.json",
-    auto_create_contacts: bool = True
+    db_session: Session,
+    auto_create_contacts: bool = True,
 ) -> Dict[str, Any]:
     """
     Convenience function to push opportunities to CRM
@@ -152,28 +146,25 @@ def push_to_crm(
     Args:
         crm_url: Base URL of the CRM API
         crm_api_key: CRM API key for authentication
-        opportunities_file: Path to opportunities JSON file
+        db_session: SQLAlchemy session to query opportunities
         auto_create_contacts: Whether to auto-create contacts
 
     Returns:
         Import results dictionary
     """
     client = CRMClient(crm_url, crm_api_key)
-    return client.push_collected_opportunities(opportunities_file, auto_create_contacts)
+    return client.push_collected_opportunities(db_session, auto_create_contacts)
 
 
 if __name__ == "__main__":
-    # Example usage
     import os
-    from pathlib import Path
+    from .database import get_engine, get_session, init_db
 
-    # Configure logging
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    # Get API key from environment
     crm_url = os.getenv("CRM_URL", "http://localhost:8000")
     crm_api_key = os.getenv("CRM_API_KEY")
 
@@ -186,39 +177,37 @@ if __name__ == "__main__":
         print("4. Copy the key and set it: export CRM_API_KEY=crm_...")
         exit(1)
 
-    # Path to opportunities file
-    data_dir = Path(__file__).parent / "data"
-    opportunities_file = data_dir / "opportunities.json"
-
-    if not opportunities_file.exists():
-        print(f"No opportunities file found at {opportunities_file}")
-        print("Run 'govbizops collect' first to collect opportunities")
-        exit(1)
+    engine = get_engine()
+    init_db(engine)
+    SessionFactory = get_session(engine)
+    session = SessionFactory()
 
     try:
         result = push_to_crm(
             crm_url=crm_url,
             crm_api_key=crm_api_key,
-            opportunities_file=str(opportunities_file),
-            auto_create_contacts=True
+            db_session=session,
+            auto_create_contacts=True,
         )
 
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("CRM IMPORT RESULTS")
-        print("="*50)
+        print("=" * 50)
         print(f"Contracts created: {result['contracts_created']}")
         print(f"Contracts skipped: {result['contracts_skipped']}")
         print(f"Contacts created:  {result['contacts_created']}")
 
-        if result.get('errors'):
+        if result.get("errors"):
             print(f"\nErrors ({len(result['errors'])}):")
-            for error in result['errors'][:5]:  # Show first 5 errors
+            for error in result["errors"][:5]:
                 print(f"  - {error}")
-            if len(result['errors']) > 5:
+            if len(result["errors"]) > 5:
                 print(f"  ... and {len(result['errors']) - 5} more")
 
-        print("="*50)
+        print("=" * 50)
 
     except Exception as e:
         print(f"Failed to push opportunities to CRM: {e}")
         exit(1)
+    finally:
+        session.close()

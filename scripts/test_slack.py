@@ -10,9 +10,10 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+
 def test_slack_webhook():
     """Test the Slack webhook with a simple message"""
-    webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
 
     print("=== Slack Webhook Test ===\n")
 
@@ -30,28 +31,21 @@ def test_slack_webhook():
         "blocks": [
             {
                 "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "🧪 GovBizOps Test Message"
-                }
+                "text": {"type": "plain_text", "text": "🧪 GovBizOps Test Message"},
             },
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": "This is a test message to verify your Slack webhook is working correctly.\n\nIf you see this message in Slack, your webhook is configured properly! ✓"
-                }
-            }
+                    "text": "This is a test message to verify your Slack webhook is working correctly.\n\nIf you see this message in Slack, your webhook is configured properly! ✓",
+                },
+            },
         ],
-        "text": "GovBizOps Test Message"
+        "text": "GovBizOps Test Message",
     }
 
     try:
-        response = requests.post(
-            webhook_url,
-            json=payload,
-            timeout=10
-        )
+        response = requests.post(webhook_url, json=payload, timeout=10)
 
         print(f"Response Status Code: {response.status_code}")
 
@@ -76,6 +70,7 @@ def test_slack_webhook():
         print(f"❌ ERROR: Unexpected error - {e}")
         return False
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     success = test_slack_webhook()
     exit(0 if success else 1)

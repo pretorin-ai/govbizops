@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "govbizops"
+version = "0.1.0"
+description = "Python library for collecting government contract opportunities"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "requests>=2.31.0",
+    "python-dateutil>=2.8.2",
+    "python-dotenv>=1.0.0",
+    "flask>=3.0.0",
+    "beautifulsoup4>=4.12.0",
+    "openai>=1.0.0",
+    "playwright>=1.40.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "hatch",
+]
+
+[project.scripts]
+govbizops = "govbizops.main:main"
+govbizops-setup = "govbizops.setup_playwright:main"
+
+[project.urls]
+Homepage = "https://github.com/pretorin-ai/govbizops"
+Repository = "https://github.com/pretorin-ai/govbizops"
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=govbizops --cov-report=term-missing"
+
+[tool.coverage.run]
+omit = ["src/govbizops/__main__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__",
+    "pragma: no cover",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/govbizops"]

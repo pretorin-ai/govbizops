@@ -300,12 +300,20 @@ class SAMWebScraper:
         Returns:
             Dictionary with scraped data
         """
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            return loop.run_until_complete(self.scrape_opportunity(url))
-        finally:
-            loop.close()
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            # Already inside an async context — run in a new thread to
+            # avoid "cannot run nested event loop" errors.
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, self.scrape_opportunity(url)).result()
+        else:
+            return asyncio.run(self.scrape_opportunity(url))
 
 
 # Convenience function for one-off scraping
@@ -341,9 +349,17 @@ def scrape_sam_opportunity(
         async with SAMWebScraper(headless=headless, server_mode=server_mode) as scraper:
             return await scraper.scrape_opportunity(url)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(_scrape())
-    finally:
-        loop.close()
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # Already inside an async context — run in a new thread to
+        # avoid "cannot run nested event loop" errors.
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, _scrape()).result()
+    else:
+        return asyncio.run(_scrape())

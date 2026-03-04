@@ -317,6 +317,17 @@ class TestScrapeSync:
             result = scraper.scrape_sync("https://sam.gov/opp/123/view")
         assert result == expected
 
+    @pytest.mark.asyncio
+    async def test_from_running_loop(self):
+        """scrape_sync should work when called from inside a running event loop."""
+        scraper = SAMWebScraper()
+        expected = {"success": True, "description": "from loop"}
+        with patch.object(
+            scraper, "scrape_opportunity", new_callable=AsyncMock, return_value=expected
+        ):
+            result = scraper.scrape_sync("https://sam.gov/opp/123/view")
+        assert result == expected
+
 
 class TestScrapeSamOpportunity:
     def test_explicit_server_mode(self):
@@ -347,6 +358,18 @@ class TestScrapeSamOpportunity:
         monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
         monkeypatch.delenv("DISPLAY", raising=False)
         expected = {"success": True}
+        mock_scraper = AsyncMock()
+        mock_scraper.scrape_opportunity.return_value = expected
+        mock_scraper.__aenter__ = AsyncMock(return_value=mock_scraper)
+        mock_scraper.__aexit__ = AsyncMock(return_value=False)
+        with patch("govbizops.sam_scraper.SAMWebScraper", return_value=mock_scraper):
+            result = scrape_sam_opportunity("https://sam.gov/opp/123/view")
+        assert result == expected
+
+    @pytest.mark.asyncio
+    async def test_from_running_loop(self):
+        """scrape_sam_opportunity should work when called from inside a running event loop."""
+        expected = {"success": True, "description": "from loop"}
         mock_scraper = AsyncMock()
         mock_scraper.scrape_opportunity.return_value = expected
         mock_scraper.__aenter__ = AsyncMock(return_value=mock_scraper)

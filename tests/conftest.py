@@ -1,9 +1,10 @@
 """Shared fixtures for govbizops tests"""
 
-import json
-import os
 import pytest
-from unittest.mock import patch
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from govbizops.database import Base, Opportunity
 
 
 @pytest.fixture
@@ -14,6 +15,18 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai-key")
     monkeypatch.setenv("CRM_API_KEY", "crm_test_key")
     monkeypatch.setenv("CRM_URL", "http://localhost:8000")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+
+
+@pytest.fixture
+def db_session():
+    """Create an in-memory SQLite database session for tests."""
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.close()
 
 
 @pytest.fixture
@@ -39,22 +52,12 @@ def sample_opportunity():
 
 
 @pytest.fixture
-def sample_opportunities_store(sample_opportunity):
-    """Return stored format {noticeId: {collected_date, data}}."""
-    return {
-        sample_opportunity["noticeId"]: {
-            "collected_date": "2025-01-16T10:00:00",
-            "data": sample_opportunity,
-        }
-    }
-
-
-@pytest.fixture
-def tmp_json_file(tmp_path, sample_opportunities_store):
-    """Create a temp JSON file with sample opportunity data."""
-    fp = tmp_path / "opportunities.json"
-    fp.write_text(json.dumps(sample_opportunities_store, indent=2))
-    return fp
+def sample_opportunity_row(db_session, sample_opportunity):
+    """Insert a sample opportunity into the DB and return the row."""
+    opp = Opportunity.from_api_response(sample_opportunity)
+    db_session.add(opp)
+    db_session.commit()
+    return opp
 
 
 @pytest.fixture

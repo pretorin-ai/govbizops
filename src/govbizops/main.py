@@ -33,11 +33,15 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 from govbizops.client import SAMGovClient
 from govbizops.collector import OpportunityCollector
+from govbizops.database import get_engine, get_session, init_db
 
 
-def get_data_dir() -> str:
-    """Get data directory"""
-    return os.path.join(os.getcwd(), "data")
+def _init_db_session():
+    """Initialize the database and return a session."""
+    engine = get_engine()
+    init_db(engine)
+    SessionFactory = get_session(engine)
+    return SessionFactory()
 
 
 def send_slack_notification(opportunities: List[Dict[str, str]]) -> bool:
@@ -198,45 +202,47 @@ def run_collector(args: argparse.Namespace) -> int:
         args.days_back = SAMGovClient.MAX_DAYS_RANGE
         logger.info(f"   Using maximum allowed range: {args.days_back} days")
 
-    # Initialize collector
-    storage_path: str = args.storage_path or os.path.join(
-        get_data_dir(), "opportunities.json"
-    )
-    collector: OpportunityCollector = OpportunityCollector(
-        api_key=os.environ["SAM_GOV_API_KEY"],
-        naics_codes=naics_codes,
-        storage_path=storage_path,
-    )
+    # Initialize database session
+    db_session = _init_db_session()
 
-    new_opportunities: List[Dict[str, str]]
-    if args.days_back:
-        logger.info(f"Collecting opportunities from the past {args.days_back} days")
-        new_opportunities = collector.collect_daily_opportunities(
-            days_back=args.days_back
+    try:
+        collector: OpportunityCollector = OpportunityCollector(
+            api_key=os.environ["SAM_GOV_API_KEY"],
+            naics_codes=naics_codes,
+            db_session=db_session,
         )
-    else:
-        logger.info("Collecting daily opportunities")
-        new_opportunities = collector.collect_daily_opportunities()
 
-    logger.info(f"Collected {len(new_opportunities)} new opportunities")
+        new_opportunities: List[Dict[str, str]]
+        if args.days_back:
+            logger.info(f"Collecting opportunities from the past {args.days_back} days")
+            new_opportunities = collector.collect_daily_opportunities(
+                days_back=args.days_back
+            )
+        else:
+            logger.info("Collecting daily opportunities")
+            new_opportunities = collector.collect_daily_opportunities()
 
-    # Get summary
-    summary: Dict[str, object] = collector.get_summary()
-    logger.info(f"Total opportunities in database: {summary['total_opportunities']}")
+        logger.info(f"Collected {len(new_opportunities)} new opportunities")
 
-    # Send Slack notification if enabled and there are new opportunities
-    notify_enabled: bool = hasattr(args, "notify") and args.notify
-    logger.info(f"Slack notifications enabled: {notify_enabled}")
+        # Get summary
+        summary: Dict[str, object] = collector.get_summary()
+        logger.info(f"Total opportunities in database: {summary['total_opportunities']}")
 
-    if notify_enabled and new_opportunities:
-        logger.info("Sending Slack notification for new opportunities")
-        send_slack_notification(new_opportunities)
-    elif notify_enabled and not new_opportunities:
-        logger.info("Slack notifications enabled but no new opportunities to report")
-    elif not notify_enabled:
-        logger.info("Slack notifications not enabled (use --notify flag to enable)")
+        # Send Slack notification if enabled and there are new opportunities
+        notify_enabled: bool = hasattr(args, "notify") and args.notify
+        logger.info(f"Slack notifications enabled: {notify_enabled}")
 
-    return len(new_opportunities)
+        if notify_enabled and new_opportunities:
+            logger.info("Sending Slack notification for new opportunities")
+            send_slack_notification(new_opportunities)
+        elif notify_enabled and not new_opportunities:
+            logger.info("Slack notifications enabled but no new opportunities to report")
+        elif not notify_enabled:
+            logger.info("Slack notifications not enabled (use --notify flag to enable)")
+
+        return len(new_opportunities)
+    finally:
+        db_session.close()
 
 
 def run_viewer(args: argparse.Namespace) -> None:
@@ -268,23 +274,16 @@ def run_crm_push(args: argparse.Namespace) -> None:
         logger.error("4. Copy the key and set it: export CRM_API_KEY=crm_...")
         sys.exit(1)
 
-    # Get opportunities file path
-    storage_path: str = args.storage_path or os.path.join(
-        get_data_dir(), "opportunities.json"
-    )
+    # Initialize database session
+    db_session = _init_db_session()
 
-    if not os.path.exists(storage_path):
-        logger.error(f"No opportunities file found at {storage_path}")
-        logger.error("Run 'govbizops collect' first to collect opportunities")
-        sys.exit(1)
-
-    logger.info(f"Pushing opportunities from {storage_path} to CRM at {crm_url}")
+    logger.info(f"Pushing opportunities from database to CRM at {crm_url}")
 
     try:
         result: Dict[str, object] = push_to_crm(
             crm_url=crm_url,
             crm_api_key=crm_api_key,
-            opportunities_file=storage_path,
+            db_session=db_session,
             auto_create_contacts=not args.no_contacts,
         )
 
@@ -307,6 +306,8 @@ def run_crm_push(args: argparse.Namespace) -> None:
     except Exception as e:
         logger.error(f"Failed to push opportunities to CRM: {e}")
         sys.exit(1)
+    finally:
+        db_session.close()
 
 
 def run_scheduled_collector(args: argparse.Namespace) -> None:
@@ -358,9 +359,6 @@ def main() -> None:
         help=f"Number of days to look back (max 90, default: 1)",
     )
     collector_parser.add_argument(
-        "--storage-path", type=str, default=None, help="Path to store opportunities"
-    )
-    collector_parser.add_argument(
         "--notify",
         action="store_true",
         help="Send Slack notifications for new opportunities (requires SLACK_WEBHOOK_URL)",
@@ -380,9 +378,6 @@ def main() -> None:
         "--naics-codes",
         type=str,
         help=f"Comma-separated NAICS codes (max 50, default from NAICS_CODES env var or 541511,541512)",
-    )
-    scheduled_parser.add_argument(
-        "--storage-path", type=str, default=None, help="Path to store opportunities"
     )
     scheduled_parser.add_argument(
         "--notify",
@@ -414,9 +409,6 @@ def main() -> None:
         help="CRM API key (default: from CRM_API_KEY env var)",
     )
     crm_parser.add_argument(
-        "--storage-path", type=str, default=None, help="Path to opportunities JSON file"
-    )
-    crm_parser.add_argument(
         "--no-contacts",
         action="store_true",
         help="Do not auto-create contacts from point-of-contact info",
@@ -439,11 +431,8 @@ def main() -> None:
         logger.error("SAM_GOV_API_KEY environment variable is required")
         sys.exit(1)
 
-    # Create data and logs directories
-    data_dir: str = os.path.join(os.getcwd(), "data")
+    # Create logs directory
     logs_dir: str = os.path.join(os.getcwd(), "logs")
-
-    os.makedirs(data_dir, exist_ok=True)
     os.makedirs(logs_dir, exist_ok=True)
 
     # Route to appropriate function

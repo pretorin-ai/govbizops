@@ -1,87 +1,44 @@
 """Tests for OpportunityCollector"""
 
-import json
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from govbizops.collector import OpportunityCollector
+from govbizops.database import Opportunity
 
 
 @pytest.fixture
-def collector(tmp_path):
-    """Create a collector with a temp storage path."""
+def collector(db_session):
+    """Create a collector with a test DB session."""
     with patch("time.sleep"):
         c = OpportunityCollector(
             api_key="test-key",
             naics_codes=["541511"],
-            storage_path=str(tmp_path / "opps.json"),
+            db_session=db_session,
         )
     return c
 
 
 class TestInit:
-    def test_valid_init(self, tmp_path):
+    def test_valid_init(self, db_session):
         with patch("time.sleep"):
             c = OpportunityCollector(
                 api_key="key",
                 naics_codes=["541511", "541512"],
-                storage_path=str(tmp_path / "opps.json"),
+                db_session=db_session,
             )
         assert c.naics_codes == ["541511", "541512"]
 
-    def test_too_many_naics(self, tmp_path):
+    def test_too_many_naics(self, db_session):
         codes = [str(i) for i in range(51)]
         with pytest.raises(ValueError, match="Maximum 50"):
-            OpportunityCollector("key", codes, str(tmp_path / "opps.json"))
-
-    def test_loads_existing_storage(self, tmp_path):
-        fp = tmp_path / "opps.json"
-        fp.write_text(json.dumps({"id1": {"collected_date": "2025-01-01", "data": {}}}))
-        with patch("time.sleep"):
-            c = OpportunityCollector("key", ["541511"], str(fp))
-        assert "id1" in c.opportunities
-
-
-class TestLoadOpportunities:
-    def test_file_exists_valid(self, tmp_path):
-        fp = tmp_path / "opps.json"
-        fp.write_text(json.dumps({"a": 1}))
-        with patch("time.sleep"):
-            c = OpportunityCollector("key", ["541511"], str(fp))
-        assert c.opportunities == {"a": 1}
-
-    def test_file_exists_invalid_json(self, tmp_path):
-        fp = tmp_path / "opps.json"
-        fp.write_text("not json!")
-        with patch("time.sleep"):
-            c = OpportunityCollector("key", ["541511"], str(fp))
-        assert c.opportunities == {}
-
-    def test_file_missing(self, tmp_path):
-        with patch("time.sleep"):
-            c = OpportunityCollector("key", ["541511"], str(tmp_path / "missing.json"))
-        assert c.opportunities == {}
-
-
-class TestSaveOpportunities:
-    def test_success(self, collector, tmp_path):
-        collector.opportunities = {"id1": {"data": "test"}}
-        collector._save_opportunities()
-        saved = json.loads(Path(collector.storage_path).read_text())
-        assert "id1" in saved
-
-    def test_write_error(self, collector):
-        collector.storage_path = Path("/nonexistent/dir/file.json")
-        collector.opportunities = {"id1": {"data": "test"}}
-        # Should not raise, just logs
-        collector._save_opportunities()
+            OpportunityCollector("key", codes, db_session)
 
 
 class TestCollectDailyOpportunities:
     @patch("time.sleep")
-    def test_new_opps_found(self, mock_sleep, collector):
+    def test_new_opps_found(self, mock_sleep, collector, db_session):
         mock_opps = [
             {"noticeId": "new1", "type": "Solicitation"},
             {"noticeId": "new2", "type": "Solicitation"},
@@ -91,15 +48,14 @@ class TestCollectDailyOpportunities:
         ):
             result = collector.collect_daily_opportunities()
         assert len(result) == 2
-        assert "new1" in collector.opportunities
-        assert "new2" in collector.opportunities
+        assert db_session.query(Opportunity).count() == 2
 
     @patch("time.sleep")
-    def test_duplicates_filtered(self, mock_sleep, collector):
-        collector.opportunities["existing"] = {
-            "collected_date": "2025-01-01",
-            "data": {"noticeId": "existing"},
-        }
+    def test_duplicates_filtered(self, mock_sleep, collector, db_session):
+        # Pre-insert an existing opportunity
+        db_session.add(Opportunity(notice_id="existing", opp_type="Solicitation"))
+        db_session.commit()
+
         mock_opps = [
             {"noticeId": "existing", "type": "Solicitation"},
             {"noticeId": "new1", "type": "Solicitation"},
@@ -155,25 +111,27 @@ class TestCollectDailyOpportunities:
 
 
 class TestGetOpportunitiesByDateRange:
-    def test_in_range(self, collector):
-        collector.opportunities = {
-            "id1": {
-                "collected_date": "2025-01-15T10:00:00",
-                "data": {"noticeId": "id1"},
-            }
-        }
+    def test_in_range(self, collector, db_session):
+        opp = Opportunity(
+            notice_id="id1",
+            collected_date=datetime(2025, 1, 15, 10, 0, 0),
+        )
+        db_session.add(opp)
+        db_session.commit()
+
         start = datetime(2025, 1, 1)
         end = datetime(2025, 1, 31)
         result = collector.get_opportunities_by_date_range(start, end)
         assert len(result) == 1
 
-    def test_out_of_range(self, collector):
-        collector.opportunities = {
-            "id1": {
-                "collected_date": "2025-03-15T10:00:00",
-                "data": {"noticeId": "id1"},
-            }
-        }
+    def test_out_of_range(self, collector, db_session):
+        opp = Opportunity(
+            notice_id="id1",
+            collected_date=datetime(2025, 3, 15, 10, 0, 0),
+        )
+        db_session.add(opp)
+        db_session.commit()
+
         start = datetime(2025, 1, 1)
         end = datetime(2025, 1, 31)
         result = collector.get_opportunities_by_date_range(start, end)
@@ -181,60 +139,69 @@ class TestGetOpportunitiesByDateRange:
 
 
 class TestGetOpportunitiesByNaics:
-    def test_match(self, collector):
-        collector.opportunities = {
-            "id1": {"data": {"noticeId": "id1", "naicsCode": "541511,541512"}}
-        }
+    def test_match(self, collector, db_session):
+        opp = Opportunity(notice_id="id1", naics_code="541511,541512")
+        db_session.add(opp)
+        db_session.commit()
+
         result = collector.get_opportunities_by_naics("541511")
         assert len(result) == 1
 
-    def test_no_match(self, collector):
-        collector.opportunities = {
-            "id1": {"data": {"noticeId": "id1", "naicsCode": "541511"}}
-        }
+    def test_no_match(self, collector, db_session):
+        opp = Opportunity(notice_id="id1", naics_code="541511")
+        db_session.add(opp)
+        db_session.commit()
+
         result = collector.get_opportunities_by_naics("999999")
         assert len(result) == 0
 
 
 class TestGetAllOpportunities:
-    def test_returns_data_list(self, collector):
-        collector.opportunities = {
-            "id1": {"data": {"noticeId": "id1"}},
-            "id2": {"data": {"noticeId": "id2"}},
-        }
+    def test_returns_data_list(self, collector, db_session):
+        db_session.add(Opportunity(notice_id="id1"))
+        db_session.add(Opportunity(notice_id="id2"))
+        db_session.commit()
+
         result = collector.get_all_opportunities()
         assert len(result) == 2
 
 
 class TestGetSummary:
     def test_empty(self, collector):
-        collector.opportunities = {}
         result = collector.get_summary()
         assert result["total_opportunities"] == 0
         assert result["date_range"] is None
 
-    def test_single(self, collector):
-        collector.opportunities = {
-            "id1": {
-                "collected_date": "2025-01-15T10:00:00",
-                "data": {"naicsCode": "541511"},
-            }
-        }
+    def test_single(self, collector, db_session):
+        opp = Opportunity(
+            notice_id="id1",
+            naics_code="541511",
+            collected_date=datetime(2025, 1, 15, 10, 0, 0),
+        )
+        db_session.add(opp)
+        db_session.commit()
+
         result = collector.get_summary()
         assert result["total_opportunities"] == 1
         assert result["naics_breakdown"]["541511"] == 1
 
-    def test_multiple(self, collector):
-        collector.opportunities = {
-            "id1": {
-                "collected_date": "2025-01-10T10:00:00",
-                "data": {"naicsCode": "541511"},
-            },
-            "id2": {
-                "collected_date": "2025-01-15T10:00:00",
-                "data": {"naicsCode": "541512"},
-            },
-        }
+    def test_multiple(self, collector, db_session):
+        db_session.add(
+            Opportunity(
+                notice_id="id1",
+                naics_code="541511",
+                collected_date=datetime(2025, 1, 10, 10, 0, 0),
+            )
+        )
+        db_session.add(
+            Opportunity(
+                notice_id="id2",
+                naics_code="541512",
+                collected_date=datetime(2025, 1, 15, 10, 0, 0),
+            )
+        )
+        db_session.commit()
+
         result = collector.get_summary()
         assert result["total_opportunities"] == 2
         assert "earliest" in result["date_range"]

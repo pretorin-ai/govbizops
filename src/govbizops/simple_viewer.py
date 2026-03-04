@@ -1,15 +1,15 @@
 """
-Simple viewer for opportunities.json
+Simple viewer for opportunities stored in the database.
 """
 
 from flask import Flask, render_template, jsonify, request
 from markupsafe import escape
-import json
 import os
 from importlib import resources
 from dotenv import load_dotenv
 
 from govbizops.sam_scraper import scrape_sam_opportunity
+from govbizops.database import Opportunity, get_engine, get_session, init_db
 
 load_dotenv()
 
@@ -18,81 +18,77 @@ _templates_ref = resources.files("govbizops").joinpath("templates")
 template_folder = str(_templates_ref)
 app = Flask(__name__, template_folder=template_folder, static_folder=template_folder)
 
+# Database setup — lazily initialized
+_SessionFactory = None
 
-def get_data_dir():
-    """Get data directory"""
-    return os.path.join(os.getcwd(), "data")
+
+def _get_db_session():
+    """Get a database session, initializing the engine on first call."""
+    global _SessionFactory
+    if _SessionFactory is None:
+        engine = get_engine()
+        init_db(engine)
+        _SessionFactory = get_session(engine)
+    return _SessionFactory()
 
 
 @app.route("/")
 def index():
-    """Display opportunities from opportunities.json"""
-    json_file = os.path.join(get_data_dir(), "opportunities.json")
-
-    if not os.path.exists(json_file):
-        return f"<h1>Error</h1><p>File '{escape(json_file)}' not found. Run the collector first.</p>"
-
+    """Display opportunities from the database."""
     try:
-        with open(json_file, "r") as f:
-            data = json.load(f)
+        session = _get_db_session()
+        results = (
+            session.query(Opportunity)
+            .order_by(Opportunity.posted_date.desc())
+            .all()
+        )
 
-        # Extract opportunities and sort by collected date
+        if not results:
+            return "<h1>No opportunities</h1><p>Run the collector first.</p>"
+
         opportunities = []
-        for notice_id, opp_data in data.items():
-            opp = opp_data["data"]
-            opp["_collected_date"] = opp_data["collected_date"]
-            opportunities.append(opp)
-
-        # Sort by posted date (newest first)
-        opportunities.sort(key=lambda x: x.get("postedDate", ""), reverse=True)
+        for opp in results:
+            d = opp.to_dict()
+            d["_collected_date"] = opp.collected_date.isoformat() if opp.collected_date else ""
+            opportunities.append(d)
 
         return render_template(
             "simple_viewer.html", opportunities=opportunities, total=len(opportunities)
         )
 
     except Exception as e:
-        return f"<h1>Error</h1><p>Error reading JSON file: {escape(str(e))}</p>"
+        return f"<h1>Error</h1><p>Error reading opportunities: {escape(str(e))}</p>"
+    finally:
+        if "session" in locals():
+            session.close()
 
 
 @app.route("/export/<notice_id>")
 def export_opportunity(notice_id):
     """Export a single opportunity as JSON, optionally with scraped description"""
-    json_file = os.path.join(get_data_dir(), "opportunities.json")
     include_description = request.args.get("description", "false").lower() == "true"
 
-    if not os.path.exists(json_file):
-        return jsonify({"error": "No opportunities data found"}), 404
-
     try:
-        with open(json_file, "r") as f:
-            data = json.load(f)
+        session = _get_db_session()
+        opp = session.query(Opportunity).filter(Opportunity.notice_id == notice_id).first()
 
-        if notice_id not in data:
+        if opp is None:
             return jsonify({"error": "Opportunity not found"}), 404
 
-        opportunity = data[notice_id]["data"].copy()
+        opportunity = opp.to_dict()
 
-        # If description is requested and not already cached, scrape it
         if include_description:
-            # Check if we already have a scraped description cached
-            if "scraped_description" not in data[notice_id]:
-                # Scrape the description
-                url = opportunity.get("uiLink")
+            if not opp.scraped_description:
+                url = opp.ui_link
                 if url:
                     try:
-                        # scrape_sam_opportunity already handles async internally
                         scraped_data = scrape_sam_opportunity(url)
 
                         if scraped_data and scraped_data.get("success"):
                             description = scraped_data.get("description")
                             if description:
-                                # Cache the scraped description
-                                data[notice_id]["scraped_description"] = description
-
-                                # Save updated data back to file
-                                with open(json_file, "w") as f:
-                                    json.dump(data, f, indent=2)
-
+                                opp.scraped_description = description
+                                session.commit()
                                 opportunity["scraped_description"] = description
                             else:
                                 opportunity["scraping_note"] = (
@@ -101,25 +97,20 @@ def export_opportunity(notice_id):
                         else:
                             opportunity["scraping_note"] = "Failed to scrape page"
                     except Exception as e:
-                        # If scraping fails, just continue without description
                         opportunity["scraping_error"] = str(e)
             else:
-                # Use cached description
-                opportunity["scraped_description"] = data[notice_id][
-                    "scraped_description"
-                ]
+                opportunity["scraped_description"] = opp.scraped_description
 
         return jsonify(opportunity)
 
     except Exception as e:
         return jsonify({"error": f"Export failed: {str(e)}"}), 500
+    finally:
+        if "session" in locals():
+            session.close()
 
 
 if __name__ == "__main__":
-    # Ensure data directory exists
-    os.makedirs(get_data_dir(), exist_ok=True)
-
     print("Simple Viewer Configuration:")
-    print(f"Data directory: {get_data_dir()}")
-
+    print("Starting web viewer on http://localhost:5000")
     app.run(debug=True, port=5000)

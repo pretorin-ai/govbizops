@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from govbizops.crm_client import CRMClient, push_to_crm
+from govbizops.database import Opportunity
 
 
 class TestCRMClientInit:
@@ -83,43 +84,37 @@ class TestImportOpportunities:
 
 
 class TestPushCollectedOpportunities:
-    def test_success(self, tmp_path):
+    def test_success(self, db_session):
         client = CRMClient("http://localhost:8000", "key")
-        fp = tmp_path / "opps.json"
-        data = {
-            "id1": {
-                "collected_date": "2025-01-15",
-                "data": {"noticeId": "id1", "title": "Test"},
-            }
-        }
-        fp.write_text(json.dumps(data))
+        db_session.add(Opportunity(notice_id="id1", title="Test"))
+        db_session.commit()
+
         expected = {
             "contracts_created": 1,
             "contracts_skipped": 0,
             "contacts_created": 0,
         }
         with patch.object(client, "import_opportunities", return_value=expected):
-            result = client.push_collected_opportunities(str(fp))
+            result = client.push_collected_opportunities(db_session)
         assert result["contracts_created"] == 1
 
-    def test_file_not_found(self):
+    def test_empty_db(self, db_session):
         client = CRMClient("http://localhost:8000", "key")
-        with pytest.raises(Exception):
-            client.push_collected_opportunities("/nonexistent/file.json")
-
-    def test_invalid_json(self, tmp_path):
-        client = CRMClient("http://localhost:8000", "key")
-        fp = tmp_path / "bad.json"
-        fp.write_text("not json")
-        with pytest.raises(Exception):
-            client.push_collected_opportunities(str(fp))
+        expected = {
+            "contracts_created": 0,
+            "contracts_skipped": 0,
+            "contacts_created": 0,
+        }
+        with patch.object(client, "import_opportunities", return_value=expected):
+            result = client.push_collected_opportunities(db_session)
+        assert result["contracts_created"] == 0
 
 
 class TestPushToCrm:
-    def test_convenience_function(self, tmp_path):
-        fp = tmp_path / "opps.json"
-        data = {"id1": {"collected_date": "2025-01-15", "data": {"noticeId": "id1"}}}
-        fp.write_text(json.dumps(data))
+    def test_convenience_function(self, db_session):
+        db_session.add(Opportunity(notice_id="id1"))
+        db_session.commit()
+
         expected = {
             "contracts_created": 1,
             "contracts_skipped": 0,
@@ -129,5 +124,5 @@ class TestPushToCrm:
             "govbizops.crm_client.CRMClient.push_collected_opportunities",
             return_value=expected,
         ):
-            result = push_to_crm("http://localhost:8000", "key", str(fp))
+            result = push_to_crm("http://localhost:8000", "key", db_session)
         assert result["contracts_created"] == 1

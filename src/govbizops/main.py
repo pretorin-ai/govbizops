@@ -11,14 +11,14 @@ import logging
 import json
 import requests
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import Dict, List, NoReturn, Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file in current working directory
 load_dotenv(override=False)
 
 # Configure logging
-log_dir = os.path.join(os.getcwd(), "logs")
+log_dir: str = os.path.join(os.getcwd(), "logs")
 os.makedirs(log_dir, exist_ok=True)
 
 logging.basicConfig(
@@ -29,18 +29,18 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 from govbizops.client import SAMGovClient
 from govbizops.collector import OpportunityCollector
 
 
-def get_data_dir():
+def get_data_dir() -> str:
     """Get data directory"""
     return os.path.join(os.getcwd(), "data")
 
 
-def send_slack_notification(opportunities: List[Dict[str, Any]]) -> bool:
+def send_slack_notification(opportunities: List[Dict[str, str]]) -> bool:
     """
     Send Slack notification for new opportunities
 
@@ -50,7 +50,7 @@ def send_slack_notification(opportunities: List[Dict[str, Any]]) -> bool:
     Returns:
         True if notification sent successfully, False otherwise
     """
-    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    webhook_url: Optional[str] = os.environ.get("SLACK_WEBHOOK_URL")
 
     logger.info(
         f"send_slack_notification called with {len(opportunities) if opportunities else 0} opportunities"
@@ -70,7 +70,7 @@ def send_slack_notification(opportunities: List[Dict[str, Any]]) -> bool:
 
     try:
         # Create message blocks for Slack
-        blocks = [
+        blocks: List[Dict[str, object]] = [
             {
                 "type": "header",
                 "text": {
@@ -84,19 +84,19 @@ def send_slack_notification(opportunities: List[Dict[str, Any]]) -> bool:
 
         # Add up to 5 opportunities to avoid message size limits
         for opp in opportunities[:5]:
-            title = opp.get("title", "Untitled")
-            notice_id = opp.get("noticeId", "N/A")
-            posted_date = opp.get("postedDate", "N/A")
-            deadline = opp.get("responseDeadLine", "N/A")
-            naics = opp.get("naicsCode", "N/A")
-            ui_link = opp.get("uiLink", "")
+            title: str = opp.get("title", "Untitled")
+            notice_id: str = opp.get("noticeId", "N/A")
+            posted_date: str = opp.get("postedDate", "N/A")
+            deadline: str = opp.get("responseDeadLine", "N/A")
+            naics: str = opp.get("naicsCode", "N/A")
+            ui_link: str = opp.get("uiLink", "")
 
             # Format deadline to just the date part
             if deadline and deadline != "N/A":
                 deadline = deadline[:10]
 
             # Create opportunity block
-            opp_block = {
+            opp_block: Dict[str, object] = {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
@@ -138,7 +138,7 @@ def send_slack_notification(opportunities: List[Dict[str, Any]]) -> bool:
             )
 
         # Send to Slack
-        payload = {
+        payload: Dict[str, object] = {
             "blocks": blocks,
             "text": f"{len(opportunities)} new contract opportunities found",  # Fallback text
         }
@@ -146,7 +146,7 @@ def send_slack_notification(opportunities: List[Dict[str, Any]]) -> bool:
         logger.info(f"Sending POST request to Slack webhook...")
         logger.debug(f"Payload has {len(blocks)} blocks")
 
-        response = requests.post(webhook_url, json=payload, timeout=10)
+        response: requests.Response = requests.post(webhook_url, json=payload, timeout=10)
 
         logger.info(f"Slack API response status: {response.status_code}")
 
@@ -167,15 +167,17 @@ def send_slack_notification(opportunities: List[Dict[str, Any]]) -> bool:
         return False
 
 
-def run_collector(args):
+def run_collector(args: argparse.Namespace) -> int:
     """Run the opportunity collector"""
     logger.info("Starting opportunity collector")
 
     # Parse NAICS codes - from args, env var, or defaults
+    naics_codes: List[str]
     if args.naics_codes:
         naics_codes = args.naics_codes.split(",")
     elif os.getenv("NAICS_CODES"):
-        naics_codes = os.getenv("NAICS_CODES").split(",")
+        naics_env: str = os.getenv("NAICS_CODES", "")
+        naics_codes = naics_env.split(",")
     else:
         naics_codes = ["541511", "541512"]  # Default IT services codes
 
@@ -197,15 +199,16 @@ def run_collector(args):
         logger.info(f"   Using maximum allowed range: {args.days_back} days")
 
     # Initialize collector
-    storage_path = args.storage_path or os.path.join(
+    storage_path: str = args.storage_path or os.path.join(
         get_data_dir(), "opportunities.json"
     )
-    collector = OpportunityCollector(
+    collector: OpportunityCollector = OpportunityCollector(
         api_key=os.environ["SAM_GOV_API_KEY"],
         naics_codes=naics_codes,
         storage_path=storage_path,
     )
 
+    new_opportunities: List[Dict[str, str]]
     if args.days_back:
         logger.info(f"Collecting opportunities from the past {args.days_back} days")
         new_opportunities = collector.collect_daily_opportunities(
@@ -218,11 +221,11 @@ def run_collector(args):
     logger.info(f"Collected {len(new_opportunities)} new opportunities")
 
     # Get summary
-    summary = collector.get_summary()
+    summary: Dict[str, object] = collector.get_summary()
     logger.info(f"Total opportunities in database: {summary['total_opportunities']}")
 
     # Send Slack notification if enabled and there are new opportunities
-    notify_enabled = hasattr(args, "notify") and args.notify
+    notify_enabled: bool = hasattr(args, "notify") and args.notify
     logger.info(f"Slack notifications enabled: {notify_enabled}")
 
     if notify_enabled and new_opportunities:
@@ -236,23 +239,23 @@ def run_collector(args):
     return len(new_opportunities)
 
 
-def run_viewer(args):
+def run_viewer(args: argparse.Namespace) -> None:
     """Run the simple web viewer"""
     logger.info(f"Starting web viewer on port {args.port}")
 
     from govbizops import simple_viewer
 
-    host = "127.0.0.1" if args.debug else "0.0.0.0"
+    host: str = "127.0.0.1" if args.debug else "0.0.0.0"
     simple_viewer.app.run(host=host, port=args.port, debug=args.debug)
 
 
-def run_crm_push(args):
+def run_crm_push(args: argparse.Namespace) -> None:
     """Push collected opportunities to CRM"""
     from govbizops.crm_client import push_to_crm
 
     # Get API key from args or environment
-    crm_url = args.crm_url or os.getenv("CRM_URL", "http://localhost:8000")
-    crm_api_key = args.crm_api_key or os.getenv("CRM_API_KEY")
+    crm_url: str = args.crm_url or os.getenv("CRM_URL", "http://localhost:8000")
+    crm_api_key: Optional[str] = args.crm_api_key or os.getenv("CRM_API_KEY")
 
     if not crm_api_key:
         logger.error("CRM API key required. Set CRM_API_KEY environment variable")
@@ -266,7 +269,7 @@ def run_crm_push(args):
         sys.exit(1)
 
     # Get opportunities file path
-    storage_path = args.storage_path or os.path.join(
+    storage_path: str = args.storage_path or os.path.join(
         get_data_dir(), "opportunities.json"
     )
 
@@ -278,7 +281,7 @@ def run_crm_push(args):
     logger.info(f"Pushing opportunities from {storage_path} to CRM at {crm_url}")
 
     try:
-        result = push_to_crm(
+        result: Dict[str, object] = push_to_crm(
             crm_url=crm_url,
             crm_api_key=crm_api_key,
             opportunities_file=storage_path,
@@ -306,7 +309,7 @@ def run_crm_push(args):
         sys.exit(1)
 
 
-def run_scheduled_collector(args):
+def run_scheduled_collector(args: argparse.Namespace) -> None:
     """Run collector on a schedule"""
     logger.info(f"Starting scheduled collector (interval: {args.interval} minutes)")
     logger.info(
@@ -318,9 +321,9 @@ def run_scheduled_collector(args):
     while True:
         try:
             logger.info("Running scheduled collection")
-            collected = run_collector(args)
+            collected: int = run_collector(args)
 
-            next_run = datetime.now() + timedelta(minutes=args.interval)
+            next_run: datetime = datetime.now() + timedelta(minutes=args.interval)
             logger.info(f"Collected {collected} opportunities. Next run at {next_run}")
 
             # Sleep until next interval
@@ -335,14 +338,14 @@ def run_scheduled_collector(args):
             time.sleep(args.interval * 60)
 
 
-def main():
-    parser = argparse.ArgumentParser(
+def main() -> None:
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="GovBizOps - Government Contract Opportunity Management"
     )
-    subparsers = parser.add_subparsers(dest="mode", help="Operation mode")
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = parser.add_subparsers(dest="mode", help="Operation mode")
 
     # Collector mode
-    collector_parser = subparsers.add_parser("collect", help="Collect opportunities")
+    collector_parser: argparse.ArgumentParser = subparsers.add_parser("collect", help="Collect opportunities")
     collector_parser.add_argument(
         "--naics-codes",
         type=str,
@@ -364,7 +367,7 @@ def main():
     )
 
     # Scheduled collector mode
-    scheduled_parser = subparsers.add_parser(
+    scheduled_parser: argparse.ArgumentParser = subparsers.add_parser(
         "schedule", help="Run collector on schedule"
     )
     scheduled_parser.add_argument(
@@ -388,14 +391,14 @@ def main():
     )
 
     # Viewer mode
-    viewer_parser = subparsers.add_parser("viewer", help="Run web viewer")
+    viewer_parser: argparse.ArgumentParser = subparsers.add_parser("viewer", help="Run web viewer")
     viewer_parser.add_argument(
         "--port", type=int, default=5000, help="Port to run viewer on (default: 5000)"
     )
     viewer_parser.add_argument("--debug", action="store_true", help="Run in debug mode")
 
     # CRM push mode
-    crm_parser = subparsers.add_parser(
+    crm_parser: argparse.ArgumentParser = subparsers.add_parser(
         "push-crm", help="Push collected opportunities to Pretorin CRM"
     )
     crm_parser.add_argument(
@@ -420,9 +423,9 @@ def main():
     )
 
     # Diagnostic mode
-    diag_parser = subparsers.add_parser("diagnose", help="Run diagnostic tests")
+    diag_parser: argparse.ArgumentParser = subparsers.add_parser("diagnose", help="Run diagnostic tests")
 
-    args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
 
     # Debug environment loading
     logger.info(f"Current working directory: {os.getcwd()}")
@@ -437,8 +440,8 @@ def main():
         sys.exit(1)
 
     # Create data and logs directories
-    data_dir = os.path.join(os.getcwd(), "data")
-    logs_dir = os.path.join(os.getcwd(), "logs")
+    data_dir: str = os.path.join(os.getcwd(), "data")
+    logs_dir: str = os.path.join(os.getcwd(), "logs")
 
     os.makedirs(data_dir, exist_ok=True)
     os.makedirs(logs_dir, exist_ok=True)

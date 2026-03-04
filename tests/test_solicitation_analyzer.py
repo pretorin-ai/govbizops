@@ -4,27 +4,29 @@ import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 
-from govbizops.solicitation_analyzer import SolicitationAnalyzer
+from govbizops.solicitation_analyzer import SolicitationAnalyzer, DEFAULT_OPENAI_MODEL
 
 
 @pytest.fixture
 def analyzer():
-    with patch("govbizops.solicitation_analyzer.OpenAI"):
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
-            a = SolicitationAnalyzer("sam-key")
+    with patch("time.sleep"):
+        with patch("govbizops.solicitation_analyzer.OpenAI"):
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+                a = SolicitationAnalyzer("sam-key")
     return a
 
 
 @pytest.fixture
 def analyzer_no_openai():
-    with patch.dict("os.environ", {}, clear=True):
-        # Remove OPENAI_API_KEY
-        import os
+    with patch("time.sleep"):
+        with patch.dict("os.environ", {}, clear=True):
+            # Remove OPENAI_API_KEY
+            import os
 
-        old = os.environ.pop("OPENAI_API_KEY", None)
-        a = SolicitationAnalyzer("sam-key")
-        if old is not None:
-            os.environ["OPENAI_API_KEY"] = old
+            old = os.environ.pop("OPENAI_API_KEY", None)
+            a = SolicitationAnalyzer("sam-key")
+            if old is not None:
+                os.environ["OPENAI_API_KEY"] = old
     return a
 
 
@@ -32,9 +34,27 @@ class TestInit:
     def test_with_openai(self, analyzer):
         assert analyzer.openai_client is not None
         assert analyzer.api_key == "sam-key"
+        assert analyzer.client is not None
+        assert analyzer.openai_model == DEFAULT_OPENAI_MODEL
 
     def test_without_openai(self, analyzer_no_openai):
         assert analyzer_no_openai.openai_client is None
+
+    def test_custom_model_param(self):
+        with patch("time.sleep"):
+            with patch.dict("os.environ", {}, clear=True):
+                import os
+                old = os.environ.pop("OPENAI_API_KEY", None)
+                a = SolicitationAnalyzer("sam-key", openai_model="gpt-4o")
+                if old is not None:
+                    os.environ["OPENAI_API_KEY"] = old
+        assert a.openai_model == "gpt-4o"
+
+    def test_model_from_env(self):
+        with patch("time.sleep"):
+            with patch.dict("os.environ", {"OPENAI_MODEL": "gpt-4-turbo"}, clear=True):
+                a = SolicitationAnalyzer("sam-key")
+        assert a.openai_model == "gpt-4-turbo"
 
 
 class TestFetchDescriptionFromApiUrl:
@@ -315,19 +335,15 @@ class TestGenerateAiResponse:
 
 class TestFetchOpportunityById:
     def test_found_exact_match(self, analyzer):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
+        mock_data = {
             "opportunitiesData": [{"noticeId": "target-id", "title": "Found It"}]
         }
-        with patch.object(analyzer.session, "get", return_value=mock_resp):
+        with patch.object(analyzer.client, "search_opportunities", return_value=mock_data):
             result = analyzer.fetch_opportunity_by_id("target-id")
         assert result["title"] == "Found It"
 
     def test_found_url_match(self, analyzer):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
+        mock_data = {
             "opportunitiesData": [
                 {
                     "noticeId": "other",
@@ -336,28 +352,25 @@ class TestFetchOpportunityById:
                 }
             ]
         }
-        with patch.object(analyzer.session, "get", return_value=mock_resp):
+        with patch.object(analyzer.client, "search_opportunities", return_value=mock_data):
             result = analyzer.fetch_opportunity_by_id("target-id")
         assert result["title"] == "URL Match"
 
     def test_not_found(self, analyzer):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"opportunitiesData": []}
-        with patch.object(analyzer.session, "get", return_value=mock_resp):
+        mock_data = {"opportunitiesData": []}
+        with patch.object(analyzer.client, "search_opportunities", return_value=mock_data):
             result = analyzer.fetch_opportunity_by_id("nonexistent")
         assert result is None
 
     def test_exception(self, analyzer):
-        with patch.object(analyzer.session, "get", side_effect=Exception("network")):
+        with patch.object(analyzer.client, "search_opportunities", side_effect=Exception("network")):
             result = analyzer.fetch_opportunity_by_id("id")
         assert result is None
 
     def test_api_error_status(self, analyzer):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_resp.text = "error"
-        with patch.object(analyzer.session, "get", return_value=mock_resp):
+        with patch.object(
+            analyzer.client, "search_opportunities", side_effect=Exception("500 Server Error")
+        ):
             result = analyzer.fetch_opportunity_by_id("id")
         assert result is None
 

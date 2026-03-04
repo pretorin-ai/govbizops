@@ -9,33 +9,31 @@ from typing import Dict, List, Any, Optional
 from openai import OpenAI
 import os
 from datetime import datetime
-from dotenv import load_dotenv
 
+from .client import SAMGovClient
 from .sam_scraper import scrape_sam_opportunity
 
-load_dotenv()
-
 logger = logging.getLogger(__name__)
+
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 
 
 class SolicitationAnalyzer:
     """Analyzes solicitations and generates responses using AI"""
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, openai_model: Optional[str] = None):
         """
         Initialize solicitation analyzer
 
         Args:
             api_key: SAM.gov API key
+            openai_model: OpenAI model name (default from OPENAI_MODEL env var or gpt-4o-mini)
         """
         self.api_key = api_key
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "X-Api-Key": api_key,
-                "Accept": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            }
+        self.client = SAMGovClient(api_key)
+        self.session = self.client.session
+        self.openai_model = (
+            openai_model or os.getenv("OPENAI_MODEL") or DEFAULT_OPENAI_MODEL
         )
 
         # Initialize OpenAI client if API key is available
@@ -408,7 +406,7 @@ Keep the response professional and specific to the solicitation requirements. Fo
 """
 
             response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",  # Use the current cost-effective model
+                model=self.openai_model,
                 messages=[
                     {
                         "role": "system",
@@ -430,86 +428,64 @@ Keep the response professional and specific to the solicitation requirements. Fo
         """
         Fetch opportunity data by ID from SAM.gov API
 
+        Uses SAMGovClient.search_opportunities() to respect rate limiting,
+        daily limits, and validation logic.
+
         Args:
             opportunity_id: The opportunity ID from SAM.gov URL
 
         Returns:
             Opportunity data or None if not found
         """
-        from datetime import datetime, timedelta
+        from datetime import timedelta
 
-        # SAM.gov API requires PostedFrom and PostedTo parameters
-        # Try multiple date ranges since we don't know when this was posted
         today = datetime.now()
 
+        # SAM.gov API requires date ranges; try progressively wider windows.
+        # Each window is capped at MAX_DAYS_RANGE (90 days) to stay within
+        # the client's validation limits.
+        max_days = SAMGovClient.MAX_DAYS_RANGE
         date_ranges = [
-            # Recent (last 3 months)
-            (
-                (today - timedelta(days=90)).strftime("%m/%d/%Y"),
-                today.strftime("%m/%d/%Y"),
-            ),
-            # Last 6 months
-            (
-                (today - timedelta(days=180)).strftime("%m/%d/%Y"),
-                today.strftime("%m/%d/%Y"),
-            ),
-            # Last year
-            (
-                (today - timedelta(days=365)).strftime("%m/%d/%Y"),
-                today.strftime("%m/%d/%Y"),
-            ),
-            # This year so far
-            (f"01/01/{today.year}", today.strftime("%m/%d/%Y")),
+            (today - timedelta(days=max_days), today),
+            (today - timedelta(days=max_days * 2), today - timedelta(days=max_days)),
+            (today - timedelta(days=max_days * 3), today - timedelta(days=max_days * 2)),
+            (today - timedelta(days=max_days * 4), today - timedelta(days=max_days * 3)),
         ]
 
-        base_url = "https://api.sam.gov/opportunities/v2/search"
-
-        # Try different search approaches with multiple date ranges
-        search_variations = [
+        search_kwargs_list = [
             {"q": opportunity_id},
             {"noticeId": opportunity_id},
             {"opportunityId": opportunity_id},
         ]
 
         for posted_from, posted_to in date_ranges:
-            logger.info(f"Trying date range: {posted_from} to {posted_to}")
+            logger.info(
+                f"Trying date range: {posted_from.strftime('%m/%d/%Y')} to {posted_to.strftime('%m/%d/%Y')}"
+            )
 
-            # Base parameters for this date range
-            base_params = {
-                "api_key": self.api_key,
-                "postedFrom": posted_from,
-                "postedTo": posted_to,
-                "limit": 1000,
-            }
-
-            for variation in search_variations:
+            for extra_kwargs in search_kwargs_list:
                 try:
-                    params = {**base_params, **variation}
-                    logger.info(f"Searching with: {variation}")
+                    logger.info(f"Searching with: {extra_kwargs}")
+                    data = self.client.search_opportunities(
+                        posted_from=posted_from,
+                        posted_to=posted_to,
+                        limit=1000,
+                        **extra_kwargs,
+                    )
 
-                    response = self.session.get(base_url, params=params)
+                    opportunities = data.get("opportunitiesData", [])
+                    logger.info(
+                        f"Found {len(opportunities)} opportunities in search"
+                    )
 
-                    if response.status_code == 200:
-                        data = response.json()
-                        opportunities = data.get("opportunitiesData", [])
-
-                        logger.info(
-                            f"Found {len(opportunities)} opportunities in search"
-                        )
-
-                        for opp in opportunities:
-                            if (
-                                opp.get("noticeId") == opportunity_id
-                                or opp.get("opportunityId") == opportunity_id
-                                or opportunity_id in str(opp.get("uiLink", ""))
-                            ):
-                                logger.info(f"Found match: {opp.get('title')}")
-                                return opp
-
-                    else:
-                        logger.warning(
-                            f"API request failed with status {response.status_code}: {response.text}"
-                        )
+                    for opp in opportunities:
+                        if (
+                            opp.get("noticeId") == opportunity_id
+                            or opp.get("opportunityId") == opportunity_id
+                            or opportunity_id in str(opp.get("uiLink", ""))
+                        ):
+                            logger.info(f"Found match: {opp.get('title')}")
+                            return opp
 
                 except Exception as e:
                     logger.warning(f"Search attempt failed: {e}")
